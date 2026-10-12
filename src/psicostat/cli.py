@@ -158,6 +158,13 @@ def main(argv=None):
     e.add_argument("--out", default=None)
     sub.add_parser("app", help="abrir la interfaz web / launch web UI")
     args = ap.parse_args(argv)
+    # Windows consoles often use a legacy code page (cp1252) that cannot print η², χ², →, etc.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower().replace("-", "") != "utf8":
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):  # pragma: no cover
+                pass
     lang = args.lang
 
     if args.cmd == "wizard":
