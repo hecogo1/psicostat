@@ -154,3 +154,7 @@ Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and the [Co
 PsicoStat is a teaching aid: always double-check results and wording with your supervisor or a statistician.
 
 License: [MIT](LICENSE).
+
+## Despliegue en Streamlit Community Cloud / Deploy
+
+Repositorio / repository: `hecogo1/psicostat` · rama / branch: `main` · archivo principal / main file path: `streamlit_app.py`. Las dependencias están en `requirements.txt`.

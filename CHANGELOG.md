@@ -12,3 +12,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 - Análisis con comprobación de supuestos, cambio automático a la alternativa, tamaños del efecto con IC 95%, post hoc y gráficos.
 - Informes APA 7 en español e inglés (Markdown y DOCX).
 - 13 conjuntos de datos de ejemplo simulados, tests con pytest y CI en GitHub Actions.
+- Archivos para desplegar la interfaz en Streamlit Community Cloud (`streamlit_app.py`, `requirements.txt`, `.streamlit/config.toml`).
+
+### Corregido / Fixed
+- La CLI ya no falla en consolas de Windows con codificación cp1252 al imprimir símbolos como η² o → / The CLI no longer crashes on Windows cp1252 consoles.

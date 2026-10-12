@@ -1,0 +1,8 @@
+# Dependencies for Streamlit Community Cloud (see pyproject.toml for the package itself)
+numpy>=1.23
+pandas>=1.5
+scipy>=1.11
+statsmodels>=0.14
+matplotlib>=3.6
+python-docx>=1.0
+streamlit>=1.30
