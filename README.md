@@ -1,5 +1,7 @@
 # PsicoStat 📊
 
+**Demo:** [psicostat.streamlit.app](https://psicostat.streamlit.app/)
+
 **Asistente open source de metodología y análisis estadístico para psicología** · *Open-source methods & statistics assistant for psychology* — [English below](#english)
 
 [![CI](https://github.com/hecogo1/psicostat/actions/workflows/ci.yml/badge.svg)](https://github.com/hecogo1/psicostat/actions/workflows/ci.yml)
