@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+from cycler import cycler
 from scipy import stats
 from statsmodels.stats.anova import AnovaRM, anova_lm
 from statsmodels.stats.contingency_tables import cochrans_q, mcnemar
@@ -27,6 +28,16 @@ from .design import Design, recommend
 from .template import columns
 
 warnings.filterwarnings("ignore", category=FutureWarning)
+
+PALETTE = ["#0F766E", "#3730A3", "#D97706", "#BE123C", "#0E7490", "#7C3AED"]
+ACCENT = "#D97706"
+plt.rcParams.update({
+    "axes.prop_cycle": cycler(color=PALETTE), "font.family": "DejaVu Sans", "font.size": 10,
+    "axes.edgecolor": "#94A3B8", "axes.labelcolor": "#1E293B", "axes.titleweight": "bold",
+    "xtick.color": "#475569", "ytick.color": "#475569", "axes.grid": True, "grid.color": "#E7E3DA",
+    "grid.linewidth": .8, "axes.axisbelow": True, "figure.facecolor": "white", "axes.facecolor": "#FFFDF8",
+    "legend.frameon": False, "savefig.facecolor": "white",
+})
 SMALL_N = 30
 
 
@@ -215,12 +226,14 @@ def _plot_groups(groups: dict, ylabel, outdir, name="fig_grupos.png"):
     fig, ax = plt.subplots(figsize=(6, 4))
     labels = list(groups)
     data = [np.asarray(groups[g], float) for g in labels]
-    ax.boxplot(data, widths=.5, showfliers=False)
+    ax.boxplot(data, widths=.5, showfliers=False, patch_artist=True,
+               boxprops={"facecolor": "#CCFBF1", "edgecolor": "#0F766E"}, medianprops={"color": "#0F766E", "lw": 2},
+               whiskerprops={"color": "#64748B"}, capprops={"color": "#64748B"})
     ax.set_xticks(range(1, len(labels) + 1), labels)
     rng = np.random.default_rng(1)
     for i, x in enumerate(data, start=1):
-        ax.scatter(i + rng.uniform(-.12, .12, len(x)), x, s=12, alpha=.6, color="#1f77b4")
-        ax.errorbar(i + .3, x.mean(), yerr=stats.sem(x) * 1.96, fmt="D", color="#d62728", capsize=4)
+        ax.scatter(i + rng.uniform(-.12, .12, len(x)), x, s=12, alpha=.55, color="#3730A3", edgecolor="none")
+        ax.errorbar(i + .3, x.mean(), yerr=stats.sem(x) * 1.96, fmt="D", color=ACCENT, capsize=4)
     ax.set_ylabel(ylabel)
     ax.spines[["top", "right"]].set_visible(False)
     return _save(fig, outdir, name)
@@ -230,9 +243,9 @@ def _plot_profiles(mat, names, ylabel, outdir, name="fig_medidas.png"):
     fig, ax = plt.subplots(figsize=(6, 4))
     x = np.arange(len(names))
     for row in mat:
-        ax.plot(x, row, color="grey", alpha=.25, lw=.8)
+        ax.plot(x, row, color="#0F766E", alpha=.18, lw=.8)
     m = mat.mean(axis=0)
-    ax.errorbar(x, m, yerr=1.96 * mat.std(axis=0, ddof=1) / np.sqrt(len(mat)), color="#d62728", lw=2.5, marker="o", capsize=4)
+    ax.errorbar(x, m, yerr=1.96 * mat.std(axis=0, ddof=1) / np.sqrt(len(mat)), color=ACCENT, lw=2.5, marker="o", capsize=4)
     ax.set_xticks(x, names)
     ax.set_ylabel(ylabel)
     ax.spines[["top", "right"]].set_visible(False)
@@ -254,10 +267,10 @@ def _plot_interaction(means: pd.DataFrame, ses: pd.DataFrame, xlabel, ylabel, ou
 
 def _plot_scatter(x, y, xlabel, ylabel, outdir, name="fig_dispersion.png"):
     fig, ax = plt.subplots(figsize=(5, 4))
-    ax.scatter(x, y, s=14, alpha=.7)
+    ax.scatter(x, y, s=16, alpha=.65, color="#3730A3", edgecolor="none")
     b, a = np.polyfit(x, y, 1)
     xs = np.linspace(np.min(x), np.max(x), 50)
-    ax.plot(xs, a + b * xs, color="#d62728")
+    ax.plot(xs, a + b * xs, color=ACCENT, lw=2.2)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.spines[["top", "right"]].set_visible(False)
@@ -803,7 +816,7 @@ def _logreg(d, df, res, outdir):
         x0 = X.iloc[:, 0].to_numpy()
         ax.scatter(x0, y + np.random.default_rng(2).uniform(-.04, .04, n), s=12, alpha=.5)
         o = np.argsort(x0)
-        ax.plot(x0[o], np.asarray(model.predict(Xc))[o], ".", color="#d62728", ms=3)
+        ax.plot(x0[o], np.asarray(model.predict(Xc))[o], ".", color=ACCENT, ms=3)
         ax.set_xlabel(X.columns[0])
         ax.set_ylabel(f"P({d.dv_name} = 1)")
         res.figures.append(_save(fig, outdir, "fig_logistica.png"))
