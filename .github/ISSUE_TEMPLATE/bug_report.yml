@@ -1,0 +1,24 @@
+name: 🐞 Error / Bug report
+description: Algo no funciona o un resultado parece incorrecto / Something is broken or a result looks wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: ¿Qué ha pasado? / What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: ¿Qué esperabas? (si es un resultado, indica el software de referencia, p. ej. SPSS/JASP/R) / What did you expect?
+  - type: textarea
+    id: repro
+    attributes:
+      label: Cómo reproducirlo (adjunta diseno.json y un CSV mínimo SIN datos personales) / Steps to reproduce (attach design + minimal CSV WITHOUT personal data)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión de PsicoStat, Python y sistema / PsicoStat, Python and OS version

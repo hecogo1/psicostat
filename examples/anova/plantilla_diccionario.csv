@@ -1,0 +1,4 @@
+columna/column,descripcion,description,tipo,type,valores/values
+id,Identificador único del participante,Unique participant identifier,identificador,identifier,
+metodo,Grupo (factor entre sujetos),Group (between-subjects factor),nominal (categoría),nominal (category),"lectura, subrayado, autoevaluacion"
+rendimiento,Variable dependiente,Dependent variable,cuantitativa (intervalo/razón),quantitative (interval/ratio),

@@ -1,0 +1,14 @@
+name: ✨ Propuesta / Feature request
+description: Nueva prueba, diseño o mejora / New test, design or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: ¿Qué necesitas y para qué tipo de estudio? / What do you need and for what kind of study?
+    validations:
+      required: true
+  - type: textarea
+    id: refs
+    attributes:
+      label: Referencias metodológicas (opcional) / Methodological references (optional)

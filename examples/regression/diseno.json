@@ -1,0 +1,40 @@
+{
+  "title": "Predictores del burnout",
+  "question": "",
+  "analysis": "regression",
+  "design": "between",
+  "n_factors": 1,
+  "n_groups": 2,
+  "n_levels_b": 2,
+  "dv_type": "continuous",
+  "iv_type": "continuous",
+  "dv_name": "burnout",
+  "iv_name": "grupo",
+  "factor_b_name": "factor_b",
+  "levels": [
+    "g1",
+    "g2"
+  ],
+  "levels_b": [
+    "b1",
+    "b2"
+  ],
+  "dv_levels": [
+    "si",
+    "no"
+  ],
+  "predictors": [
+    "carga",
+    "apoyo",
+    "autoeficacia"
+  ],
+  "covariates": [],
+  "effect_label": "medium",
+  "effect_size": null,
+  "alpha": 0.05,
+  "power": 0.8,
+  "dropout": 0.0,
+  "rho": 0.5,
+  "event_rate": 0.3,
+  "auto_fallback": true
+}

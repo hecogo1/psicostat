@@ -1,0 +1,113 @@
+"""Bilingual (es/en) strings. Spanish is the default language."""
+LANGS = ("es", "en")
+DEFAULT_LANG = "es"
+
+T = {
+    # tests
+    "ttest_ind": ("prueba t de Welch para muestras independientes", "Welch's independent-samples t test"),
+    "mannwhitney": ("prueba U de Mann-Whitney", "Mann-Whitney U test"),
+    "ttest_paired": ("prueba t para muestras relacionadas", "paired-samples t test"),
+    "wilcoxon": ("prueba de rangos con signo de Wilcoxon", "Wilcoxon signed-rank test"),
+    "anova_oneway": ("ANOVA de un factor", "one-way ANOVA"),
+    "welch_anova": ("ANOVA de Welch", "Welch's ANOVA"),
+    "kruskal": ("prueba H de Kruskal-Wallis", "Kruskal-Wallis H test"),
+    "anova_factorial": ("ANOVA factorial entre sujetos", "between-subjects factorial ANOVA"),
+    "ancova": ("análisis de covarianza (ANCOVA)", "analysis of covariance (ANCOVA)"),
+    "anova_rm": ("ANOVA de medidas repetidas", "repeated-measures ANOVA"),
+    "friedman": ("prueba de Friedman", "Friedman test"),
+    "anova_mixed": ("ANOVA mixto (split-plot)", "mixed (split-plot) ANOVA"),
+    "chi2": ("prueba chi-cuadrado de independencia", "chi-square test of independence"),
+    "fisher": ("prueba exacta de Fisher", "Fisher's exact test"),
+    "mcnemar": ("prueba de McNemar", "McNemar's test"),
+    "cochran": ("prueba Q de Cochran", "Cochran's Q test"),
+    "pearson": ("correlación de Pearson", "Pearson correlation"),
+    "spearman": ("correlación de Spearman", "Spearman correlation"),
+    "linreg": ("regresión lineal múltiple (MCO)", "multiple linear regression (OLS)"),
+    "logreg": ("regresión logística binaria", "binary logistic regression"),
+    # assumptions
+    "a_normality": ("Normalidad (Shapiro-Wilk)", "Normality (Shapiro-Wilk)"),
+    "a_homogeneity": ("Homogeneidad de varianzas (Levene, mediana)", "Homogeneity of variance (Levene, median)"),
+    "a_sphericity": ("Esfericidad (Mauchly)", "Sphericity (Mauchly)"),
+    "a_expected": ("Frecuencias esperadas ≥ 5", "Expected frequencies ≥ 5"),
+    "a_homoscedasticity": ("Homocedasticidad (Breusch-Pagan)", "Homoscedasticity (Breusch-Pagan)"),
+    "a_multicollinearity": ("Multicolinealidad (VIF < 5)", "Multicollinearity (VIF < 5)"),
+    "a_independence": ("Independencia de residuos (Durbin-Watson 1.5–2.5)", "Independence of residuals (Durbin-Watson 1.5–2.5)"),
+    "a_slopes": ("Homogeneidad de pendientes de regresión", "Homogeneity of regression slopes"),
+    "a_epv": ("Eventos por predictor ≥ 10", "Events per predictor ≥ 10"),
+    "a_outliers": ("Valores atípicos (|z| > 3)", "Outliers (|z| > 3)"),
+    "a_linearity": ("Linealidad (inspección del diagrama de dispersión)", "Linearity (inspect scatterplot)"),
+    "a_independent_obs": ("Independencia de las observaciones (por diseño)", "Independence of observations (by design)"),
+    # magnitudes
+    "negligible": ("insignificante", "negligible"), "small": ("pequeño", "small"),
+    "medium": ("mediano", "medium"), "large": ("grande", "large"),
+    # wizard / ui
+    "app_title": ("PsicoStat · Asistente de metodología y estadística", "PsicoStat · Methods & statistics assistant"),
+    "step1": ("1. Pregunta y diseño", "1. Question & design"),
+    "step2": ("2. Variables", "2. Variables"),
+    "step3": ("3. Tamaño del efecto, α y potencia", "3. Effect size, α and power"),
+    "step4": ("4. Prueba recomendada y tamaño muestral", "4. Recommended test & sample size"),
+    "step5": ("5. Plantilla CSV", "5. CSV template"),
+    "step6": ("6. Analizar datos e informe APA", "6. Analyse data & APA report"),
+    "q_title": ("Título del estudio", "Study title"),
+    "q_question": ("Pregunta de investigación", "Research question"),
+    "q_analysis": ("¿Qué quieres hacer?", "What do you want to do?"),
+    "an_compare": ("Comparar grupos o condiciones", "Compare groups or conditions"),
+    "an_correlation": ("Relación entre dos variables (correlación)", "Relationship between two variables (correlation)"),
+    "an_regression": ("Predecir una variable (regresión)", "Predict an outcome (regression)"),
+    "an_association": ("Asociación entre dos variables categóricas", "Association between two categorical variables"),
+    "q_design": ("Tipo de diseño", "Design type"),
+    "d_between": ("Entre sujetos (grupos independientes)", "Between-subjects (independent groups)"),
+    "d_within": ("Intra sujetos / medidas repetidas (muestras relacionadas)", "Within-subjects / repeated measures (paired)"),
+    "d_mixed": ("Mixto (un factor entre + uno intra)", "Mixed (one between + one within factor)"),
+    "q_n_factors": ("Número de factores (VI)", "Number of factors (IVs)"),
+    "q_n_groups": ("Número de grupos/condiciones del factor A", "Number of groups/conditions of factor A"),
+    "q_n_levels_b": ("Número de niveles del factor B", "Number of levels of factor B"),
+    "q_dv_type": ("Nivel de medida de la VD", "Measurement level of the DV"),
+    "q_iv_type": ("Nivel de medida de la VI / predictor", "Measurement level of the IV / predictor"),
+    "t_continuous": ("Intervalo/razón (cuantitativa)", "Interval/ratio (continuous)"),
+    "t_ordinal": ("Ordinal (p. ej., Likert de un ítem, rangos)", "Ordinal (e.g., single Likert item, ranks)"),
+    "t_nominal": ("Nominal (categorías)", "Nominal (categories)"),
+    "q_dv_name": ("Nombre de la VD (sin espacios)", "DV name (no spaces)"),
+    "q_iv_name": ("Nombre de la VI / factor A", "IV / factor A name"),
+    "q_factor_b_name": ("Nombre del factor B", "Factor B name"),
+    "q_levels": ("Niveles del factor A (separados por comas)", "Levels of factor A (comma separated)"),
+    "q_levels_b": ("Niveles del factor B (separados por comas)", "Levels of factor B (comma separated)"),
+    "q_dv_levels": ("Categorías de la VD (separadas por comas)", "DV categories (comma separated)"),
+    "q_predictors": ("Predictores (separados por comas)", "Predictors (comma separated)"),
+    "q_covariates": ("Covariables (separadas por comas, opcional)", "Covariates (comma separated, optional)"),
+    "q_effect_label": ("Tamaño del efecto esperado", "Expected effect size"),
+    "q_effect_custom": ("Valor concreto (opcional; vacío = usar la etiqueta)", "Custom value (optional; empty = use label)"),
+    "q_alpha": ("Nivel α", "α level"),
+    "q_power": ("Potencia (1 − β)", "Power (1 − β)"),
+    "q_dropout": ("Pérdida esperada de participantes (0–0.5)", "Expected dropout (0–0.5)"),
+    "q_rho": ("Correlación esperada entre medidas repetidas", "Expected correlation among repeated measures"),
+    "q_event_rate": ("Proporción esperada del evento (VD = 1)", "Expected event proportion (DV = 1)"),
+    "effect_help": (
+        "Guía de Cohen (1988): d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35. "
+        "Mejor aún: usa el efecto de un metaanálisis o estudio previo (y sé conservador: los efectos publicados suelen estar inflados).",
+        "Cohen (1988) benchmarks: d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35. "
+        "Better: use the effect from a meta-analysis or prior study (and be conservative: published effects tend to be inflated)."),
+    "recommended": ("Prueba recomendada", "Recommended test"),
+    "fallback": ("Alternativa no paramétrica / si fallan supuestos", "Nonparametric / fallback alternative"),
+    "assumptions": ("Supuestos a comprobar", "Assumptions to check"),
+    "sample_size": ("Tamaño muestral necesario", "Required sample size"),
+    "per_group": ("por grupo", "per group"),
+    "total": ("total", "total"),
+    "download_template": ("Descargar plantilla CSV", "Download CSV template"),
+    "download_dict": ("Descargar diccionario de datos", "Download data dictionary"),
+    "upload": ("Sube tu CSV relleno", "Upload your filled CSV"),
+    "use_example": ("O usa datos de ejemplo simulados", "Or use simulated example data"),
+    "run": ("Analizar", "Analyse"),
+    "download_md": ("Descargar informe (Markdown)", "Download report (Markdown)"),
+    "download_docx": ("Descargar informe (DOCX)", "Download report (DOCX)"),
+    "disclaimer": (
+        "PsicoStat es una ayuda didáctica: revisa siempre los resultados y la redacción con tu tutor/a o un/a estadístico/a.",
+        "PsicoStat is a teaching aid: always review results and wording with your supervisor or a statistician."),
+}
+
+
+def t(key: str, lang: str = DEFAULT_LANG) -> str:
+    pair = T.get(key)
+    if pair is None:
+        return key
+    return pair[0] if lang == "es" else pair[1]

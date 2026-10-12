@@ -1,0 +1,39 @@
+{
+  "title": "Método de estudio y rendimiento",
+  "question": "",
+  "analysis": "compare",
+  "design": "between",
+  "n_factors": 1,
+  "n_groups": 3,
+  "n_levels_b": 2,
+  "dv_type": "continuous",
+  "iv_type": "nominal",
+  "dv_name": "rendimiento",
+  "iv_name": "metodo",
+  "factor_b_name": "factor_b",
+  "levels": [
+    "lectura",
+    "subrayado",
+    "autoevaluacion"
+  ],
+  "levels_b": [
+    "b1",
+    "b2"
+  ],
+  "dv_levels": [
+    "si",
+    "no"
+  ],
+  "predictors": [
+    "x1"
+  ],
+  "covariates": [],
+  "effect_label": "medium",
+  "effect_size": null,
+  "alpha": 0.05,
+  "power": 0.8,
+  "dropout": 0.0,
+  "rho": 0.5,
+  "event_rate": 0.3,
+  "auto_fallback": true
+}

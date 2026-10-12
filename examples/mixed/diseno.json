@@ -1,0 +1,39 @@
+{
+  "title": "Tratamiento × tiempo",
+  "question": "",
+  "analysis": "compare",
+  "design": "mixed",
+  "n_factors": 2,
+  "n_groups": 2,
+  "n_levels_b": 3,
+  "dv_type": "continuous",
+  "iv_type": "nominal",
+  "dv_name": "sintomas",
+  "iv_name": "grupo",
+  "factor_b_name": "tiempo",
+  "levels": [
+    "tcc",
+    "lista_espera"
+  ],
+  "levels_b": [
+    "pre",
+    "post",
+    "seguimiento"
+  ],
+  "dv_levels": [
+    "si",
+    "no"
+  ],
+  "predictors": [
+    "x1"
+  ],
+  "covariates": [],
+  "effect_label": "medium",
+  "effect_size": null,
+  "alpha": 0.05,
+  "power": 0.8,
+  "dropout": 0.0,
+  "rho": 0.5,
+  "event_rate": 0.3,
+  "auto_fallback": true
+}
