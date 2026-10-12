@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/img/logo.svg" width="88" alt="PsicoStat logo"></p>
+
 # PsicoStat 📊
 
 **Demo:** [psicostat.streamlit.app](https://psicostat.streamlit.app/)
@@ -25,6 +27,15 @@ PsicoStat es un proyecto independiente creado por Héctor Cózar, antiguo estudi
 
 Nació como un trabajo previo al doctorado, pero su objetivo va más allá: ayudar a la investigación ofreciendo una herramienta accesible a personas con menos formación técnica, para que puedan diseñar la metodología y el análisis estadístico de sus estudios con rigor. Empieza por la psicología, pero está pensada para todas las ciencias sociales y de la salud.
 
+![PsicoStat: paso 1, pregunta y diseño](docs/img/screenshot-step1.png)
+
+<details><summary>Más capturas / More screenshots</summary>
+
+![Prueba recomendada y tamaño muestral](docs/img/screenshot-step4.png)
+![Resultados y texto APA](docs/img/screenshot-results.png)
+
+</details>
+
 ## Instalación
 
 ```bash
@@ -42,7 +53,7 @@ pip install -e ".[app]"
 psicostat app
 ```
 
-Se abre en el navegador (http://localhost:8501). Elige idioma en la barra lateral, rellena los pasos 1–3, descarga la plantilla del paso 5 y sube tu CSV en el paso 6. Puedes probar con los **datos de ejemplo** de la barra lateral.
+Se abre en el navegador (http://localhost:8501). La barra lateral muestra los seis pasos del asistente (puedes saltar entre ellos), el idioma y los estudios de ejemplo; cada pantalla incluye a la derecha una explicación sencilla del concepto estadístico. Descarga la plantilla en el paso 5 y sube tu CSV en el paso 6. Puedes probar con los **datos de ejemplo** de la barra lateral.
 
 ### Línea de comandos
 

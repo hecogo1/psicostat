@@ -2,6 +2,15 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado [SemVer](https://semver.org/lang/es/).
 
+## [Unreleased]
+
+### Cambiado / Changed
+- Rediseño completo de la interfaz web: tema propio (verde azulado/índigo con acento ámbar), cabecera con logotipo, navegación por pasos en la barra lateral con indicador de progreso, una pantalla por paso con Atrás/Siguiente, panel de conceptos en lenguaje sencillo, tarjetas de resultados y pestañas (APA, gráficos, supuestos, tablas, método) / Full web UI redesign.
+- Gráficos con paleta coherente / Consistent plot palette.
+
+### Añadido / Added
+- Logotipo e ilustraciones SVG originales, imagen OG y capturas de pantalla en el README / Original SVG logo, illustrations, OG image and README screenshots.
+
 ## [0.1.0] - 2026-10-12
 
 ### Añadido / Added
