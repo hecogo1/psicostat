@@ -17,6 +17,12 @@ PsicoStat te guía paso a paso desde la pregunta de investigación hasta el text
 
 > ⚠️ PsicoStat es una ayuda didáctica. Revisa siempre los resultados y la redacción con tu tutor/a o un/a estadístico/a.
 
+## Sobre el proyecto
+
+PsicoStat es un proyecto independiente creado por Héctor Cózar, antiguo estudiante de la Facultad de Psicología de la Universidad Complutense de Madrid. No es un proyecto oficial de la universidad.
+
+Nació como un trabajo previo al doctorado, pero su objetivo va más allá: ayudar a la investigación ofreciendo una herramienta accesible a personas con menos formación técnica, para que puedan diseñar la metodología y el análisis estadístico de sus estudios con rigor. Empieza por la psicología, pero está pensada para todas las ciencias sociales y de la salud.
+
 ## Instalación
 
 ```bash
@@ -122,6 +128,12 @@ Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.
 **PsicoStat** guides psychology students and researchers step by step from the research question to APA 7 **Method** and **Results** text, in Spanish or English.
 
 **Features**: guided wizard (design, groups/conditions, measurement levels, covariates, expected effect size with Cohen's benchmarks, α, power) → recommended test with assumptions and nonparametric fallback → a priori sample size (validated against G*Power) → CSV template + data dictionary → analysis (descriptives, assumption checks, test, effect sizes with 95% CIs, post hoc tests, plots) → APA 7 report in Markdown and DOCX.
+
+### About
+
+PsicoStat is an independent project by Héctor Cózar, a former student of the Faculty of Psychology at the Complutense University of Madrid. It is not an official university project.
+
+It started as pre-doctoral work, but its goal is broader: to support research by giving less technical researchers an accessible tool to plan the methodology and statistical analysis of their studies rigorously. It starts with psychology but is meant for all the social and health sciences.
 
 ### Install
 
