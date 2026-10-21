@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 from .analysis import analyze
-from .design import Design, assumption_label, recommend
+from .design import DIRECTIONAL_TESTS, Design, assumption_label, recommend
 from .examples import EXAMPLES, example
 from .i18n import t
 from .power import explain, sample_size
@@ -92,7 +92,26 @@ def wizard(lang="es"):
     kw["alpha"] = _ask(t("q_alpha", lang), 0.05, cast=float)
     kw["power"] = _ask(t("q_power", lang), 0.80, cast=float)
     kw["dropout"] = _ask(t("q_dropout", lang), 0.0, cast=float)
-    return Design(**kw)
+    d = Design(**kw)
+    if recommend(d).test in DIRECTIONAL_TESTS:
+        if d.analysis == "correlation":
+            opts = [("two-sided", "bilateral / two-sided"), ("greater", f"relación positiva / positive ({d.iv_name}, {d.dv_name})"),
+                    ("less", f"relación negativa / negative ({d.iv_name}, {d.dv_name})")]
+        else:
+            a, b = d.levels[0], d.levels[1]
+            opts = [("two-sided", "bilateral / two-sided"), ("greater", f"unilateral: {a} > {b}"), ("less", f"unilateral: {a} < {b}")]
+        alt = _ask("Hipótesis (unilateral solo si la dirección se predijo de antemano)" if lang == "es"
+                   else "Hypothesis (one-sided only if the direction was predicted in advance)", 1, opts)
+        if alt != "two-sided":
+            kw["alternative"] = alt
+            d = Design(**kw)
+    return d
+
+
+def _with_alternative(d: Design, alternative):
+    if alternative is None:
+        return d
+    return Design.from_dict({**d.to_dict(), "alternative": alternative})
 
 
 def print_plan(d: Design, lang="es"):
@@ -144,6 +163,8 @@ def main(argv=None):
     w.add_argument("--out", default="estudio", help="carpeta de salida / output folder")
     p = sub.add_parser("plan", help="prueba recomendada y N / recommended test and N")
     p.add_argument("design")
+    p.add_argument("--alternative", choices=("two-sided", "greater", "less"), default=None,
+                   help="hipótesis bilateral o unilateral (nivel 1 > nivel 2 = greater) / two- or one-sided hypothesis")
     tp = sub.add_parser("template", help="plantilla CSV / CSV template")
     tp.add_argument("design")
     tp.add_argument("--n", type=int, default=None)
@@ -151,6 +172,8 @@ def main(argv=None):
     a = sub.add_parser("analyze", help="analizar CSV / analyse CSV")
     a.add_argument("design")
     a.add_argument("csv")
+    a.add_argument("--alternative", choices=("two-sided", "greater", "less"), default=None,
+                   help="hipótesis bilateral o unilateral / two- or one-sided hypothesis")
     a.add_argument("--out", default="resultados")
     a.add_argument("--formats", default="md,docx")
     a.add_argument("--decimal-comma", action="store_true", help="coma decimal en el informe en español / decimal comma in the Spanish report")
@@ -178,14 +201,14 @@ def main(argv=None):
         print(("\nRellena la plantilla y ejecuta:" if lang == "es" else "\nFill in the template and run:") +
               f"\n  psicostat analyze {os.path.join(args.out, 'diseno.json')} {tpl} --out {os.path.join(args.out, 'resultados')}")
     elif args.cmd == "plan":
-        print_plan(Design.from_json(args.design), lang)
+        print_plan(_with_alternative(Design.from_json(args.design), args.alternative), lang)
     elif args.cmd == "template":
         d = Design.from_json(args.design)
         n = args.n or sample_size(d)["n_total"]
         for x in write_template(d, n, args.out):
             print(f"→ {x}")
     elif args.cmd == "analyze":
-        d = Design.from_json(args.design)
+        d = _with_alternative(Design.from_json(args.design), args.alternative)
         if args.decimal_comma:
             d.decimal_comma = True
         res, paths = run_analysis(d, args.csv, args.out, formats=tuple(args.formats.split(",")))

@@ -6,7 +6,7 @@ import math
 from scipy import stats
 from statsmodels.stats.power import TTestIndPower, TTestPower
 
-from .design import BENCHMARKS, Design, recommend
+from .design import BENCHMARKS, DIRECTIONAL_TESTS, Design, recommend
 
 ARE_RANK = 0.864   # minimum asymptotic relative efficiency of rank tests (Hodges & Lehmann, 1956)
 NONPARAM = {"mannwhitney", "wilcoxon", "kruskal", "friedman"}
@@ -54,16 +54,19 @@ def sample_size(d: Design, rec=None) -> dict:
     es = effect_value(d, fam)
     groups = 1
     method = ("", "")
+    one = d.alternative != "two-sided" and test in DIRECTIONAL_TESTS
+    side_es, side_en = ("unilateral", "one-sided") if one else ("bilateral", "two-sided")
+    sm_alt = "larger" if one else "two-sided"
     if test in ("ttest_ind", "mannwhitney"):
-        n1 = TTestIndPower().solve_power(effect_size=es, alpha=a, power=pw, ratio=1.0, alternative="two-sided")
+        n1 = TTestIndPower().solve_power(effect_size=abs(es), alpha=a, power=pw, ratio=1.0, alternative=sm_alt)
         npg = math.ceil(n1)
         groups = 2
         n_total = 2 * npg
-        method = ("prueba t para dos muestras independientes (bilateral)", "two-sample t test (two-sided)")
+        method = (f"prueba t para dos muestras independientes ({side_es})", f"two-sample t test ({side_en})")
     elif test in ("ttest_paired", "wilcoxon"):
-        n_total = math.ceil(TTestPower().solve_power(effect_size=es, alpha=a, power=pw, alternative="two-sided"))
+        n_total = math.ceil(TTestPower().solve_power(effect_size=abs(es), alpha=a, power=pw, alternative=sm_alt))
         npg = n_total
-        method = ("prueba t para muestras relacionadas (d_z, bilateral)", "paired t test (d_z, two-sided)")
+        method = (f"prueba t para muestras relacionadas (d_z, {side_es})", f"paired t test (d_z, {side_en})")
     elif test in ("anova_oneway", "kruskal"):
         k = d.n_groups
         n_total = _min_n(lambda n: _f_power(es ** 2 * n, k - 1, n - k, a), pw, k + 1)
@@ -123,10 +126,10 @@ def sample_size(d: Design, rec=None) -> dict:
         npg = None
         method = (f"prueba chi-cuadrado (gl = {df}, efecto w)", f"chi-square test (df = {df}, effect w)")
     elif test in ("pearson", "spearman"):
-        z = stats.norm.ppf(1 - a / 2) + stats.norm.ppf(pw)
-        n_total = math.ceil((z / math.atanh(es)) ** 2 + 3)
+        z = stats.norm.ppf(1 - (a if one else a / 2)) + stats.norm.ppf(pw)
+        n_total = math.ceil((z / math.atanh(abs(es))) ** 2 + 3)
         npg = None
-        method = ("correlación (transformación z de Fisher, bilateral)", "correlation (Fisher z transformation, two-sided)")
+        method = (f"correlación (transformación z de Fisher, {side_es})", f"correlation (Fisher z transformation, {side_en})")
         if test == "spearman":
             n_total = math.ceil(n_total / 0.912)  # Bonett & Wright (2000) approximate efficiency
             method = (method[0] + "; ajuste por eficiencia de Spearman (÷ 0.912)", method[1] + "; Spearman efficiency adjustment (÷ 0.912)")
@@ -166,7 +169,7 @@ def sample_size(d: Design, rec=None) -> dict:
                       f"Includes {d.dropout:.0%} expected dropout (unadjusted N = {n_before})."))
     return {"test": test, "family": fam, "effect": es, "effect_label": d.effect_label if d.effect_size is None else "custom",
             "alpha": a, "power": pw, "n_total": int(n_total), "n_per_group": int(npg) if npg else None,
-            "groups": groups, "method": method, "notes": notes}
+            "groups": groups, "method": method, "notes": notes, "one_sided": one}
 
 
 def _b(x):
