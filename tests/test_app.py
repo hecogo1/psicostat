@@ -39,3 +39,15 @@ def test_english_and_sidebar_nav():
     at.button(key="nav_3").click().run()
     assert not at.exception
     assert any("Recommended test" in m.value for m in at.markdown)
+
+
+def test_decimal_comma_toggle():
+    at = _app()
+    at.selectbox(key="k_example").set_value("ttest").run()
+    at.toggle(key="k_decimal_comma").set_value(True).run()
+    at.button(key="nav_5").click().run()
+    at.button(key="run").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "IC 95% [-1," in html or "IC 95% [-" in html
+    assert "p &lt; ,001" in html or "p < ,001" in html

@@ -78,6 +78,8 @@ psicostat analyze ejemplo/diseno.json ejemplo/datos.csv --out ejemplo/resultados
 
 Usa `psicostat --lang en ...` para mensajes en inglés.
 
+**Coma decimal**: añade `--decimal-comma` a `psicostat analyze` (o activa «Coma decimal en el informe» en la barra lateral de la web, o `"decimal_comma": true` en `diseno.json`) para que el informe en español use coma decimal (`M = 3,25; p = ,032; IC 95% [0,08; 1,36]`). El informe en inglés siempre usa punto.
+
 ### Desde Python
 
 ```python

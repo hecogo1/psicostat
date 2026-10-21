@@ -19,7 +19,7 @@ from psicostat.effects import fmt_num, fmt_p, magnitude
 from psicostat.examples import EXAMPLES, example
 from psicostat.i18n import t
 from psicostat.power import explain, sample_size
-from psicostat.report import build_report, stat_str, to_docx, to_markdown
+from psicostat.report import build_report, stat_str, to_decimal_comma, to_docx, to_markdown
 from psicostat.template import make_template
 
 ASSETS = os.path.join(os.path.dirname(__file__), "assets")
@@ -123,7 +123,7 @@ st.markdown(CSS, unsafe_allow_html=True)
 # --------------------------------------------------------------------------- state
 FIELDS = ["title", "question", "analysis", "design", "dv_type", "iv_type", "dv_name", "iv_name", "levels", "n_factors",
           "factor_b_name", "levels_b", "dv_levels", "covariates", "predictors", "rho", "event_rate",
-          "effect_label", "effect_custom", "alpha", "power", "dropout"]
+          "effect_label", "effect_custom", "alpha", "power", "dropout", "decimal_comma"]
 LISTS = {"levels", "levels_b", "dv_levels", "covariates", "predictors"}
 
 
@@ -193,7 +193,7 @@ def current_design():
     kw["effect_label"] = g["effect_label"]
     c = str(g["effect_custom"] or "").replace(",", ".").strip()
     kw["effect_size"] = float(c) if c else None
-    kw.update(alpha=float(g["alpha"]), power=float(g["power"]), dropout=float(g["dropout"]))
+    kw.update(alpha=float(g["alpha"]), power=float(g["power"]), dropout=float(g["dropout"]), decimal_comma=bool(g["decimal_comma"]))
     return Design(**kw)
 
 
@@ -228,6 +228,9 @@ with st.sidebar:
                 f"<div><b>PsicoStat</b><small>v{__version__} · open source</small></div></div>", unsafe_allow_html=True)
     st.segmented_control("Idioma / Language", ["es", "en"], key="k_lang", default="es",
                          format_func=lambda x: {"es": "🇪🇸 Español", "en": "🇬🇧 English"}[x], label_visibility="collapsed")
+    if lang == "es":
+        st.toggle("Coma decimal en el informe (3,25)", key="k_decimal_comma",
+                  help="Algunas normas APA en español usan coma decimal. Afecta al texto, las tablas y el DOCX en español; el informe en inglés siempre usa punto.")
     st.markdown(f"<div class='ps-side-h'>{L('Pasos', 'Steps')}</div>", unsafe_allow_html=True)
     for i, (ic, name) in enumerate(STEPS):
         mark = "✓" if i < ss.step else ic
@@ -442,25 +445,26 @@ with main:
                             st.error(str(exc))
                             st.stop()
                         rep = build_report(res, lang)
+                        dc = to_decimal_comma if rep["decimal_comma"] else (lambda x: x)
                         r0 = res.rows[0]
                         mag = magnitude(r0["es_symbol"], r0["es"]) if r0["es_symbol"] else None
                         sig = r0["p"] is not None and r0["p"] < design.alpha
                         chip = (f"<span class='ps-chip {'ok' if sig else 'no'}'>{L('significativo', 'significant') if sig else L('no significativo', 'not significant')}</span>")
-                        es_txt = f"{r0['es_symbol']} = {fmt_num(r0['es'], r0['bounded'])}" if r0["es"] is not None else "—"
-                        ci_txt = (f"{L('IC 95%', '95% CI')} [{fmt_num(r0['ci'][0], r0['bounded'])}, {fmt_num(r0['ci'][1], r0['bounded'])}]"
+                        es_txt = dc(f"{r0['es_symbol']} = {fmt_num(r0['es'], r0['bounded'])}") if r0["es"] is not None else "—"
+                        ci_txt = (dc(f"{L('IC 95%', '95% CI')} [{fmt_num(r0['ci'][0], r0['bounded'])}, {fmt_num(r0['ci'][1], r0['bounded'])}]")
                                   if r0["ci"] else "")
                         cards([
                             (L("Prueba aplicada", "Test used"), cap(t(res.test, lang).split(" (")[0]),
                              (L("alternativa por supuestos", "fallback due to assumptions") if res.fallback_reason else L("según lo planificado", "as planned")), ""),
                             ("N", res.n, (L(f"{res.n_excluded} casos excluidos", f"{res.n_excluded} cases excluded") if res.n_excluded else L("sin exclusiones", "no exclusions")), "indigo"),
                             (L("Tamaño del efecto", "Effect size"), es_txt, (ci_txt + (f" · {t(mag, lang)}" if mag else "")), "amber"),
-                            (r0["label"], fmt_p(r0["p"]), chip, "rose"),
+                            (r0["label"], dc(fmt_p(r0["p"])), chip, "rose"),
                         ])
                         tabs = st.tabs([L("📝 Resultados APA", "📝 APA results"), L("📈 Gráficos", "📈 Plots"), L("✅ Supuestos", "✅ Assumptions"),
                                         L("🔢 Tablas", "🔢 Tables"), L("📄 Método", "📄 Method")])
                         with tabs[0]:
                             st.markdown("<div class='ps-apa'>" + "".join(f"<p>{html.escape(p)}</p>" for p in rep["results"]) + "</div>", unsafe_allow_html=True)
-                            st.caption(" · ".join(stat_str(r, lang) for r in res.rows[:1]))
+                            st.caption(" · ".join(stat_str(r, lang, rep["decimal_comma"]) for r in res.rows[:1]))
                         with tabs[1]:
                             cols = st.columns(min(2, max(1, len(rep["figures"]))))
                             for i, f in enumerate(rep["figures"]):

@@ -49,6 +49,7 @@ class Design:
     rho: float = 0.5                   # correlation among repeated measures
     event_rate: float = 0.3            # logistic regression
     auto_fallback: bool = True
+    decimal_comma: bool = False        # Spanish output with decimal comma (APA in some countries)
 
     def __post_init__(self):
         if self.analysis not in ANALYSES:

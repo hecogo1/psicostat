@@ -153,6 +153,7 @@ def main(argv=None):
     a.add_argument("csv")
     a.add_argument("--out", default="resultados")
     a.add_argument("--formats", default="md,docx")
+    a.add_argument("--decimal-comma", action="store_true", help="coma decimal en el informe en español / decimal comma in the Spanish report")
     e = sub.add_parser("example", help="crear ejemplo / create example")
     e.add_argument("name", choices=EXAMPLES)
     e.add_argument("--out", default=None)
@@ -185,6 +186,8 @@ def main(argv=None):
             print(f"→ {x}")
     elif args.cmd == "analyze":
         d = Design.from_json(args.design)
+        if args.decimal_comma:
+            d.decimal_comma = True
         res, paths = run_analysis(d, args.csv, args.out, formats=tuple(args.formats.split(",")))
         rep = build_report(res, lang)
         print("\n".join(rep["results"]))

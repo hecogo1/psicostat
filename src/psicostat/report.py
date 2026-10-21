@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 import numpy as np
 import pandas as pd
@@ -19,11 +20,39 @@ DESIGN_TXT = {
 }
 
 
+_VERSION_RE = re.compile(r"v\d+\.\d+\.\d+")
+_DF_RE = re.compile(r"(?<=[A-Za-zχ²_])\((\d+(?:\.\d+)?), ((?:N = )?\d+(?:\.\d+)?)\)")
+_ITEM_SEP_RE = re.compile(r"(\d|\]), (?=(?:[^\s,;()]+ [=<>] )|IC )")
+_CI_RE = re.compile(r"\[([^\[\]]*?), ([^\[\]]*?)\]")
+
+
+def to_decimal_comma(text: str) -> str:
+    """Convert APA numbers in a text to decimal comma (Spanish style).
+
+    Intervals, degrees of freedom and statistic lists use ';' as separator to avoid ambiguity:
+    t(37.62) -> t(37,62); F(2, 37.6) -> F(2; 37,6); [0.08, 1.36] -> [0,08; 1,36]; p = .032 -> p = ,032.
+    Version strings (v0.2.0) are preserved.
+    """
+    if not text:
+        return text
+    keep = _VERSION_RE.findall(text)
+    for i, v in enumerate(keep):
+        text = text.replace(v, f"\x00{i}\x00", 1)
+    text = _CI_RE.sub(lambda m: f"[{m.group(1)}; {m.group(2)}]", text)
+    text = _DF_RE.sub(lambda m: f"({m.group(1)}; {m.group(2)})", text)
+    text = _ITEM_SEP_RE.sub(lambda m: f"{m.group(1)}; ", text)
+    text = re.sub(r"(\d)\.(\d)", r"\1,\2", text)
+    text = re.sub(r"(^|[\s(\[=<>≈–-])\.(\d)", r"\1,\2", text)
+    for i, v in enumerate(keep):
+        text = text.replace(f"\x00{i}\x00", v)
+    return text
+
+
 def _L(lang):
     return 0 if lang == "es" else 1
 
 
-def stat_str(row, lang="es"):
+def stat_str(row, lang="es", decimal_comma=False):
     """APA-formatted statistic string, e.g. t(37.62) = 2.31, p = .026, g = 0.72, 95% CI [0.08, 1.36]."""
     sym = row["stat_symbol"]
     if sym == "OR":
@@ -40,7 +69,7 @@ def stat_str(row, lang="es"):
         if row["ci"] is not None and all(np.isfinite(row["ci"])):
             lab = "IC 95%" if lang == "es" else "95% CI"
             s += f", {lab} [{fmt_num(row['ci'][0], row['bounded'])}, {fmt_num(row['ci'][1], row['bounded'])}]"
-    return s
+    return to_decimal_comma(s) if decimal_comma and lang == "es" else s
 
 
 def _sig(row, alpha, lang):
@@ -233,18 +262,40 @@ def _tables(res, lang):
     return tabs
 
 
-def build_report(res, lang="es"):
+def _fmt_cell(col, x, comma):
+    if isinstance(x, (float, np.floating)):
+        if pd.isna(x):
+            return ""
+        out = fmt_p(x).replace("p = ", "").replace("p ", "") if str(col).startswith("p") else f"{x:.2f}"
+    else:
+        out = str(x)
+    return to_decimal_comma(out) if comma else out
+
+
+def format_table(df: pd.DataFrame, comma=False) -> pd.DataFrame:
+    """Return an all-string copy of a table with APA-style numbers (optionally decimal comma)."""
+    out = df.copy()
+    for c in out.columns:
+        out[c] = [_fmt_cell(c, x, comma) for x in out[c]]
+    return out
+
+
+def build_report(res, lang="es", decimal_comma=None):
+    """Build the report dict. decimal_comma=None uses design.decimal_comma; it only applies to Spanish."""
+    if decimal_comma is None:
+        decimal_comma = getattr(res.design, "decimal_comma", False)
+    comma = bool(decimal_comma) and lang == "es"
+    conv = to_decimal_comma if comma else (lambda x: x)
+    methods = [(h, conv(p)) for h, p in methods_text(res.design, lang)]
+    results = [conv(p) for p in results_text(res, lang)]
+    tables = [(name, format_table(df, comma)) for name, df in _tables(res, lang)]
     return {"title": res.design.title or ("Informe de análisis" if lang == "es" else "Analysis report"),
-            "question": res.design.question, "methods": methods_text(res.design, lang),
-            "results": results_text(res, lang), "tables": _tables(res, lang),
-            "figures": [f for f in res.figures if f], "lang": lang}
+            "question": res.design.question, "methods": methods, "results": results, "tables": tables,
+            "figures": [f for f in res.figures if f], "lang": lang, "decimal_comma": comma}
 
 
 def _md_table(df: pd.DataFrame):
-    df = df.copy()
-    for c in df.columns:
-        if pd.api.types.is_float_dtype(df[c]):
-            df[c] = df[c].map(lambda x: "" if pd.isna(x) else (fmt_p(x).replace("p = ", "").replace("p ", "") if str(c).startswith("p") else f"{x:.2f}"))
+    df = format_table(df)
     cols = [str(c).replace("|", "\\|") for c in df.columns]
     lines = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     for _, r in df.iterrows():
@@ -304,7 +355,7 @@ def to_docx(rep, path):
         for _, r in df.iterrows():
             cells = tb.add_row().cells
             for j, v in enumerate(r.values):
-                cells[j].text = (f"{v:.2f}" if isinstance(v, (float, np.floating)) and not pd.isna(v) else str(v))
+                cells[j].text = _fmt_cell(df.columns[j], v, rep.get("decimal_comma", False))
         doc.add_paragraph()
     for i, f in enumerate(rep["figures"], 1):
         doc.add_paragraph().add_run(f"{'Figura' if es else 'Figure'} {i}").bold = True
