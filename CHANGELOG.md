@@ -9,6 +9,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 - Gráficos con paleta coherente / Consistent plot palette.
 
 ### Añadido / Added
+- Coma decimal opcional en la salida en español (texto APA, tablas y DOCX), con `;` como separador en intervalos y grados de libertad; opción `--decimal-comma`, interruptor en la web y campo `decimal_comma` del diseño. El inglés mantiene el punto (#8) / Optional decimal comma for Spanish output.
 - Logotipo e ilustraciones SVG originales, imagen OG y capturas de pantalla en el README / Original SVG logo, illustrations, OG image and README screenshots.
 
 ## [0.1.0] - 2026-10-12
