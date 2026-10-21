@@ -7,6 +7,9 @@ from typing import Optional
 
 from .i18n import t
 
+ALTERNATIVES = ("two-sided", "greater", "less")
+# tests for which a one-sided (directional) alternative is valid
+DIRECTIONAL_TESTS = {"ttest_ind", "mannwhitney", "ttest_paired", "wilcoxon", "pearson", "spearman"}
 ANALYSES = ("compare", "correlation", "regression", "association")
 DESIGNS = ("between", "within", "mixed")
 LEVELS = ("continuous", "ordinal", "nominal")
@@ -50,6 +53,7 @@ class Design:
     event_rate: float = 0.3            # logistic regression
     auto_fallback: bool = True
     decimal_comma: bool = False        # Spanish output with decimal comma (APA in some countries)
+    alternative: str = "two-sided"     # two-sided / greater / less (directional H1; see DIRECTIONAL_TESTS)
 
     def __post_init__(self):
         if self.analysis not in ANALYSES:
@@ -79,6 +83,15 @@ class Design:
             self.dv_levels = ["si", "no"]
         if not self.predictors:
             self.predictors = ["x1"]
+        if self.alternative not in ALTERNATIVES:
+            raise ValueError(f"alternative must be one of {ALTERNATIVES}")
+        if self.alternative != "two-sided" and recommend(self).test not in DIRECTIONAL_TESTS:
+            raise ValueError("Los contrastes unilaterales solo están disponibles para pruebas t, Mann-Whitney, Wilcoxon y correlaciones / "
+                             "one-sided tests are only available for t tests, Mann-Whitney, Wilcoxon and correlations")
+
+    @property
+    def one_sided(self):
+        return self.alternative != "two-sided"
 
     @property
     def within_levels(self):
@@ -201,3 +214,16 @@ def assumption_label(key, lang="es"):
         base = t(key[:-5], lang)
         return base + (" de las diferencias" if lang == "es" else " of differences")
     return t(key, lang)
+
+
+def hypothesis_text(d: Design, lang="es") -> str:
+    """Directional H1 in words, e.g. 'terapia < control' or 'relación positiva'. Empty for two-sided."""
+    if not d.one_sided:
+        return ""
+    op = ">" if d.alternative == "greater" else "<"
+    if d.analysis == "correlation":
+        if lang == "es":
+            return f"relación {'positiva' if d.alternative == 'greater' else 'negativa'} entre {d.iv_name} y {d.dv_name}"
+        return f"{'positive' if d.alternative == 'greater' else 'negative'} relationship between {d.iv_name} and {d.dv_name}"
+    a, b = d.levels[0], d.levels[1]
+    return f"{d.dv_name}: {a} {op} {b}"

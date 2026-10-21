@@ -63,8 +63,8 @@ class Result:
     notes: list = field(default_factory=list)          # (es, en)
 
 
-def _row(label, sym, df, stat, p, es_sym=None, es=None, ci=None, bounded=False):
-    return {"label": label, "stat_symbol": sym, "df": df, "stat": float(stat) if stat is not None else None,
+def _row(label, sym, df, stat, p, es_sym=None, es=None, ci=None, bounded=False, alternative="two-sided"):
+    return {"alternative": alternative, "label": label, "stat_symbol": sym, "df": df, "stat": float(stat) if stat is not None else None,
             "p": float(p) if p is not None else None, "es_symbol": es_sym,
             "es": float(es) if es is not None else None,
             "ci": (float(ci[0]), float(ci[1])) if ci is not None else None, "bounded": bounded}
@@ -353,14 +353,14 @@ def _two_groups(d, df, res, outdir):
         if not ok and min(len(x), len(y)) < SMALL_N and d.auto_fallback:
             res.test, res.fallback_reason = "mannwhitney", "a_normality"
     if res.test == "ttest_ind":
-        r = stats.ttest_ind(x, y, equal_var=False)
+        r = stats.ttest_ind(x, y, equal_var=False, alternative=d.alternative)
         gval, ci = E.hedges_g(x, y)
-        res.rows.append(_row(f"{a} vs {b}", "t", f"{r.df:.2f}", r.statistic, r.pvalue, "g", gval, ci))
+        res.rows.append(_row(f"{a} vs {b}", "t", f"{r.df:.2f}", r.statistic, r.pvalue, "g", gval, ci, alternative=d.alternative))
     else:
-        r = stats.mannwhitneyu(x, y, alternative="two-sided")
+        r = stats.mannwhitneyu(x, y, alternative=d.alternative)
         rb = E.rank_biserial_ind(x, y)
         ci = E.bootstrap_ci(E.rank_biserial_ind, [x, y])
-        res.rows.append(_row(f"{a} vs {b}", "U", None, r.statistic, r.pvalue, "r_rb", rb, ci, bounded=True))
+        res.rows.append(_row(f"{a} vs {b}", "U", None, r.statistic, r.pvalue, "r_rb", rb, ci, bounded=True, alternative=d.alternative))
     res.figures.append(_plot_groups(g, d.dv_name, outdir))
 
 
@@ -383,14 +383,14 @@ def _paired(d, df, res, outdir):
             res.test, res.fallback_reason = "wilcoxon", "a_normality"
     lab = f"{d.levels[0]} vs {d.levels[1]}"
     if res.test == "ttest_paired":
-        r = stats.ttest_rel(x, y)
+        r = stats.ttest_rel(x, y, alternative=d.alternative)
         dz, ci = E.cohen_dz(diff)
-        res.rows.append(_row(lab, "t", f"{len(diff) - 1}", r.statistic, r.pvalue, "d_z", dz, ci))
+        res.rows.append(_row(lab, "t", f"{len(diff) - 1}", r.statistic, r.pvalue, "d_z", dz, ci, alternative=d.alternative))
     else:
-        r = stats.wilcoxon(x, y)
+        r = stats.wilcoxon(x, y, alternative=d.alternative)
         rb = E.rank_biserial_paired(diff)
         ci = E.bootstrap_ci(lambda dd: E.rank_biserial_paired(dd), [diff])
-        res.rows.append(_row(lab, "V", None, r.statistic, r.pvalue, "r_rb", rb, ci, bounded=True))
+        res.rows.append(_row(lab, "V", None, r.statistic, r.pvalue, "r_rb", rb, ci, bounded=True, alternative=d.alternative))
     res.figures.append(_plot_profiles(mat, d.levels, d.dv_name, outdir))
 
 
@@ -718,11 +718,11 @@ def _corr(d, df, res, outdir):
         if not ok and n < SMALL_N and d.auto_fallback:
             res.test, res.fallback_reason = "spearman", "a_normality"
     if res.test == "pearson":
-        r, p = stats.pearsonr(x, y)
-        res.rows.append(_row(f"{d.iv_name} – {d.dv_name}", "r", f"{n - 2}", r, p, "r", r, E.r_ci(r, n), bounded=True))
+        r, p = stats.pearsonr(x, y, alternative=d.alternative)
+        res.rows.append(_row(f"{d.iv_name} – {d.dv_name}", "r", f"{n - 2}", r, p, "r", r, E.r_ci(r, n), bounded=True, alternative=d.alternative))
     else:
-        r, p = stats.spearmanr(x, y)
-        res.rows.append(_row(f"{d.iv_name} – {d.dv_name}", "r_s", f"{n - 2}", r, p, "r_s", r, E.r_ci(r, n, spearman=True), bounded=True))
+        r, p = stats.spearmanr(x, y, alternative=d.alternative)
+        res.rows.append(_row(f"{d.iv_name} – {d.dv_name}", "r_s", f"{n - 2}", r, p, "r_s", r, E.r_ci(r, n, spearman=True), bounded=True, alternative=d.alternative))
     res.figures.append(_plot_scatter(x, y, d.iv_name, d.dv_name, outdir))
 
 

@@ -14,7 +14,7 @@ import streamlit as st
 
 from psicostat import __version__
 from psicostat.analysis import DataError, analyze
-from psicostat.design import Design, assumption_label, recommend
+from psicostat.design import DIRECTIONAL_TESTS, Design, assumption_label, recommend
 from psicostat.effects import fmt_num, fmt_p, magnitude
 from psicostat.examples import EXAMPLES, example
 from psicostat.i18n import t
@@ -123,7 +123,7 @@ st.markdown(CSS, unsafe_allow_html=True)
 # --------------------------------------------------------------------------- state
 FIELDS = ["title", "question", "analysis", "design", "dv_type", "iv_type", "dv_name", "iv_name", "levels", "n_factors",
           "factor_b_name", "levels_b", "dv_levels", "covariates", "predictors", "rho", "event_rate",
-          "effect_label", "effect_custom", "alpha", "power", "dropout", "decimal_comma"]
+          "effect_label", "effect_custom", "alpha", "power", "dropout", "decimal_comma", "alternative"]
 LISTS = {"levels", "levels_b", "dv_levels", "covariates", "predictors"}
 
 
@@ -194,7 +194,24 @@ def current_design():
     c = str(g["effect_custom"] or "").replace(",", ".").strip()
     kw["effect_size"] = float(c) if c else None
     kw.update(alpha=float(g["alpha"]), power=float(g["power"]), dropout=float(g["dropout"]), decimal_comma=bool(g["decimal_comma"]))
-    return Design(**kw)
+    base = Design(**kw)
+    if g.get("alternative", "two-sided") != "two-sided" and recommend(base).test in DIRECTIONAL_TESTS:
+        kw["alternative"] = g["alternative"]
+        return Design(**kw)
+    return base
+
+
+def alternative_label(x, d):
+    """Plain-language label for each hypothesis option given the current design."""
+    if x == "two-sided":
+        return L("Bilateral: hay diferencia/relación, en cualquier dirección", "Two-sided: a difference/relationship in either direction")
+    if d.analysis == "correlation":
+        pos = x == "greater"
+        return L(f"Unilateral: relación {'positiva' if pos else 'negativa'} ({d.iv_name} ↑ → {d.dv_name} {'↑' if pos else '↓'})",
+                 f"One-sided: {'positive' if pos else 'negative'} relationship ({d.iv_name} ↑ → {d.dv_name} {'↑' if pos else '↓'})")
+    a, b = d.levels[0], d.levels[1]
+    op = ">" if x == "greater" else "<"
+    return L(f"Unilateral: {d.dv_name} en «{a}» {op} «{b}»", f"One-sided: {d.dv_name} in “{a}” {op} “{b}”")
 
 
 def on_example():
@@ -380,6 +397,13 @@ with main:
             c3.number_input(t("q_dropout", lang), 0.0, 0.5, step=0.05, key="k_dropout",
                             help=L("Proporción de participantes que esperas perder (abandono, datos inválidos).",
                                    "Share of participants you expect to lose (dropout, invalid data)."))
+            if design is not None and recommend(Design(**{**design.to_dict(), "alternative": "two-sided"})).test in DIRECTIONAL_TESTS:
+                st.radio(L("Hipótesis", "Hypothesis"), ["two-sided", "greater", "less"], key="k_alternative",
+                         format_func=lambda x: alternative_label(x, design),
+                         help=L("Usa un contraste unilateral solo si predijiste la dirección ANTES de ver los datos y un efecto en la dirección "
+                                "contraria no tendría interés. Necesita menos participantes, pero no puede detectar efectos en la otra dirección.",
+                                "Use a one-sided test only if you predicted the direction BEFORE seeing the data and an effect in the opposite "
+                                "direction would be of no interest. It needs fewer participants but cannot detect effects in the other direction."))
         elif step == 3:
             head(3, L("Según tu diseño, esta es la prueba adecuada y la muestra que necesitas.", "Based on your design, this is the right test and the sample you need."))
             if design is None:
@@ -392,7 +416,8 @@ with main:
                     (L("Tamaño muestral", "Sample size"), f"N = {ssz['n_total']}",
                      (f"{ssz['n_per_group']} {t('per_group', lang)}" if ssz["n_per_group"] and ssz["groups"] > 1 else L("participantes", "participants")), "indigo"),
                     (L("Efecto a detectar", "Effect to detect"), f"{fam} = {ssz['effect']:.2f}", t(ssz["effect_label"], lang) if ssz["effect_label"] != "custom" else L("valor propio", "custom value"), "amber"),
-                    ("α · " + L("potencia", "power"), f"{fmt_num(design.alpha, True)} · {fmt_num(design.power, True)}", L("bilateral", "two-sided"), "rose"),
+                    ("α · " + L("potencia", "power"), f"{fmt_num(design.alpha, True)} · {fmt_num(design.power, True)}",
+                     (L("unilateral", "one-sided") if ssz.get("one_sided") else L("bilateral", "two-sided")), "rose"),
                 ])
                 c1, c2 = st.columns(2)
                 with c1:

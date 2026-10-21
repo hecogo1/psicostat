@@ -51,3 +51,18 @@ def test_decimal_comma_toggle():
     html = " ".join(m.value for m in at.markdown)
     assert "IC 95% [-1," in html or "IC 95% [-" in html
     assert "p &lt; ,001" in html or "p < ,001" in html
+
+
+def test_one_sided_option_in_ui():
+    at = _app()
+    at.selectbox(key="k_example").set_value("ttest").run()
+    at.button(key="nav_2").click().run()
+    at.radio(key="k_alternative").set_value("less").run()
+    at.button(key="next").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "N = 102" in html and "unilateral" in html
+    at.button(key="nav_5").click().run()
+    at.button(key="run").click().run()
+    assert not at.exception
+    assert "(unilateral)" in " ".join(m.value for m in at.markdown)

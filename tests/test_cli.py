@@ -18,7 +18,7 @@ def test_cli_example_plan_template_analyze(tmp_path, capsys):
 
 
 def test_wizard_with_defaults(tmp_path, monkeypatch, capsys):
-    answers = iter(["Mi estudio", "¿Funciona?", "1", "1", "1", "ansiedad", "grupo", "terapia,control", "1", "", "2", "", "", "", ""])
+    answers = iter(["Mi estudio", "¿Funciona?", "1", "1", "1", "ansiedad", "grupo", "terapia,control", "1", "", "2", "", "", "", "", ""])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
     assert main(["wizard", "--out", str(tmp_path / "w")]) == 0
     out = capsys.readouterr().out

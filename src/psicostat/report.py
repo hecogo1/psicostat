@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from . import __version__
-from .design import assumption_label, recommend
+from .design import DIRECTIONAL_TESTS, assumption_label, hypothesis_text, recommend
 from .effects import fmt_num, fmt_p, magnitude
 from .i18n import t
 from .power import explain, sample_size
@@ -22,7 +22,7 @@ DESIGN_TXT = {
 
 _VERSION_RE = re.compile(r"v\d+\.\d+\.\d+")
 _DF_RE = re.compile(r"(?<=[A-Za-zχ²_])\((\d+(?:\.\d+)?), ((?:N = )?\d+(?:\.\d+)?)\)")
-_ITEM_SEP_RE = re.compile(r"(\d|\]), (?=(?:[^\s,;()]+ [=<>] )|IC )")
+_ITEM_SEP_RE = re.compile(r"(\d|\]|\(unilateral\)), (?=(?:[^\s,;()]+ [=<>] )|IC )")
 _CI_RE = re.compile(r"\[([^\[\]]*?), ([^\[\]]*?)\]")
 
 
@@ -64,6 +64,8 @@ def stat_str(row, lang="es", decimal_comma=False):
         bounded = sym in ("r", "r_s")
         s = f"{sym}{df} = {fmt_num(row['stat'], bounded)}"
     s += f", {fmt_p(row['p'])}"
+    if row.get("alternative", "two-sided") != "two-sided":
+        s += " (unilateral)" if lang == "es" else " (one-tailed)"
     if row["es_symbol"] and row["es"] is not None:
         s += f", {row['es_symbol']} = {fmt_num(row['es'], row['bounded'])}" if row["es_symbol"] != row["stat_symbol"] else ""
         if row["ci"] is not None and all(np.isfinite(row["ci"])):
@@ -118,6 +120,22 @@ def _desc_sentence(res, lang):
     return head + "; ".join(parts) + "."
 
 
+def _directional(d):
+    return d.alternative != "two-sided" and recommend(d).test in DIRECTIONAL_TESTS
+
+
+def _tails_es(d):
+    if not _directional(d):
+        return "bilateral"
+    return f"contraste unilateral planificado a priori; H₁: {hypothesis_text(d, 'es')}"
+
+
+def _tails_en(d):
+    if not _directional(d):
+        return "two-sided"
+    return f"one-tailed test specified a priori; H₁: {hypothesis_text(d, 'en')}"
+
+
 def methods_text(design, lang="es"):
     d = design
     rec = recommend(d)
@@ -153,7 +171,7 @@ def methods_text(design, lang="es"):
             ana += f"Si no se cumplían los supuestos, se planificó como alternativa: {t(rec.fallback, lang)}. "
         ana += " ".join(rec.notes_text(lang)) + " "
         ana += (f"Se informan tamaños del efecto con intervalos de confianza al 95%. El nivel de significación fue α = {fmt_num(d.alpha, True)} "
-                f"(bilateral). Los análisis se realizaron con PsicoStat v{__version__} (Python; SciPy y statsmodels).")
+                f"({_tails_es(d)}). Los análisis se realizaron con PsicoStat v{__version__} (Python; SciPy y statsmodels).")
         P.append(("Análisis de datos", ana))
     else:
         P.append(("Participants", explain(ss, lang) + " Sample size should be justified before data collection (Lakens, 2022)."))
@@ -184,7 +202,7 @@ def methods_text(design, lang="es"):
             ana += f"If assumptions were not met, the planned alternative was: {t(rec.fallback, lang)}. "
         ana += " ".join(rec.notes_text(lang)) + " "
         ana += (f"Effect sizes are reported with 95% confidence intervals. The significance level was α = {fmt_num(d.alpha, True)} "
-                f"(two-sided). Analyses were run with PsicoStat v{__version__} (Python; SciPy and statsmodels).")
+                f"({_tails_en(d)}). Analyses were run with PsicoStat v{__version__} (Python; SciPy and statsmodels).")
         P.append(("Data analysis", ana))
     return P
 
@@ -219,6 +237,20 @@ def results_text(res, lang="es"):
         out.append(s)
     for note in res.notes:
         out.append(note[_L(lang)])
+    if any(r.get("alternative", "two-sided") != "two-sided" for r in res.rows):
+        r0 = res.rows[0]
+        wrong = r0["es"] is not None and ((r0["alternative"] == "greater" and r0["es"] < 0) or (r0["alternative"] == "less" and r0["es"] > 0))
+        hyp = hypothesis_text(d, lang)
+        if es:
+            s = f"Se aplicó un contraste unilateral (H₁: {hyp}); los valores p son unilaterales."
+            if wrong:
+                s += (" El efecto observado va en la dirección contraria a la hipótesis, por lo que el contraste unilateral "
+                      "no permite concluir un efecto en esa dirección.")
+        else:
+            s = f"A one-tailed test was used (H₁: {hyp}); p values are one-tailed."
+            if wrong:
+                s += " The observed effect goes in the opposite direction to the hypothesis, so the one-tailed test cannot support an effect in that direction."
+        out.append(s)
     # main results
     tl = t(res.test, lang)
     sents = []
@@ -227,7 +259,10 @@ def results_text(res, lang="es"):
         magtxt = ""
         if mag:
             magtxt = (f"; tamaño del efecto {t(mag, lang)}" if es else f"; {t(mag, lang)} effect size")
-        sents.append(f"{_subject(r, lang)} {_sig(r, d.alpha, lang)}, {stat_str(r, lang)}{magtxt}.")
+        subj, sig = _subject(r, lang), _sig(r, d.alpha, lang)
+        if es and subj.startswith("La "):
+            sig = sig.replace("significativo", "significativa")
+        sents.append(f"{subj} {sig}, {stat_str(r, lang)}{magtxt}.")
     head = (f"Resultados ({tl}): " if es else f"Results ({tl}): ")
     out.append(head + " ".join(sents))
     if res.posthoc is not None and "p_ajust/p_adj" in res.posthoc.columns and "A" in res.posthoc.columns:
