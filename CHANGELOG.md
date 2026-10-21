@@ -2,19 +2,19 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado [SemVer](https://semver.org/lang/es/).
 
-## [Unreleased]
-
-### Corregido / Fixed
-- Concordancia de género en el texto en español («La diferencia … fue estadísticamente significativa»).
-
-### Cambiado / Changed
-- Rediseño completo de la interfaz web: tema propio (verde azulado/índigo con acento ámbar), cabecera con logotipo, navegación por pasos en la barra lateral con indicador de progreso, una pantalla por paso con Atrás/Siguiente, panel de conceptos en lenguaje sencillo, tarjetas de resultados y pestañas (APA, gráficos, supuestos, tablas, método) / Full web UI redesign.
-- Gráficos con paleta coherente / Consistent plot palette.
+## [0.2.0] - 2026-10-21
 
 ### Añadido / Added
 - Contrastes unilaterales (direccionales) para t de Welch, t pareada, Mann-Whitney, Wilcoxon, Pearson y Spearman: opción en el asistente, la web y la CLI (`--alternative`), tamaño muestral a priori con α unilateral (validado con G*Power), redacción APA «(unilateral)/(one-tailed)» con H₁ en el Método y aviso si el efecto va en dirección contraria (#6) / One-sided tests.
 - Coma decimal opcional en la salida en español (texto APA, tablas y DOCX), con `;` como separador en intervalos y grados de libertad; opción `--decimal-comma`, interruptor en la web y campo `decimal_comma` del diseño. El inglés mantiene el punto (#8) / Optional decimal comma for Spanish output.
 - Logotipo e ilustraciones SVG originales, imagen OG y capturas de pantalla en el README / Original SVG logo, illustrations, OG image and README screenshots.
+
+### Cambiado / Changed
+- Rediseño completo de la interfaz web: tema propio (verde azulado/índigo con acento ámbar), cabecera con logotipo, navegación por pasos en la barra lateral con indicador de progreso, una pantalla por paso con Atrás/Siguiente, panel de conceptos en lenguaje sencillo, tarjetas de resultados y pestañas (APA, gráficos, supuestos, tablas, método) / Full web UI redesign.
+- Gráficos con paleta coherente / Consistent plot palette.
+
+### Corregido / Fixed
+- Concordancia de género en el texto en español («La diferencia … fue estadísticamente significativa»).
 
 ## [0.1.0] - 2026-10-12
 
