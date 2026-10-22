@@ -36,6 +36,49 @@ def cramers_v_ci(chi2, df, n, k_min, conf=0.95):
     return f(lo), min(f(hi), 1.0)
 
 
+def omega2_welch_ci(F, df1, df2, n, conf=0.95):
+    """CI for ω² after Welch's ANOVA by inverting the noncentral F distribution (Steiger, 2004).
+
+    Welch's F is treated as approximately noncentral F(df1, df2_Welch, λ) and each limit of λ
+    is converted with ω² = λ / (λ + N), the same mapping as the point estimate
+    ω̂² = df1(F − 1) / (df1(F − 1) + N). The interval is approximate
+    because Welch's statistic is only approximately F-distributed under heteroscedasticity.
+    """
+    lo, hi = _ncp_bounds(lambda lam: stats.ncf.cdf(F, df1, df2, lam) if lam > 0 else stats.f.cdf(F, df1, df2), conf)
+    return lo / (lo + n), hi / (hi + n)
+
+
+def cohen_g_mcnemar(b, c, conf=0.95):
+    """Cohen's g = |b/(b+c) − .5| for McNemar with an exact Clopper-Pearson CI (Clopper & Pearson, 1934).
+
+    The exact CI [π_L, π_U] for π = b/(b+c) (proportion of discordant pairs in cell b) is mapped
+    to |π − .5|; if it contains .5 the lower limit of g is 0 and the upper one is the limit
+    farthest from .5. Returns (g, (low, high)); the CI is NaN when there are no discordant pairs.
+    """
+    m = b + c
+    if m == 0:
+        return 0.0, (float("nan"), float("nan"))
+    a = 1 - conf
+    p_lo = stats.beta.ppf(a / 2, b, c + 1) if b > 0 else 0.0
+    p_hi = stats.beta.ppf(1 - a / 2, b + 1, c) if c > 0 else 1.0
+    g = abs(b / m - .5)
+    if p_lo <= .5 <= p_hi:
+        ci = (0.0, max(.5 - p_lo, p_hi - .5))
+    else:
+        ci = tuple(sorted((abs(p_lo - .5), abs(p_hi - .5))))
+    return g, (float(ci[0]), float(ci[1]))
+
+
+def eta2_q(mat):
+    """Serlin, Carr & Marascuilo's (1982) η²_Q = Q / (N(k − 1)) for Cochran's Q (N subjects, k conditions)."""
+    from statsmodels.stats.contingency_tables import cochrans_q
+    mat = np.asarray(mat)
+    n, k = mat.shape
+    if np.all(mat == mat[:, :1]):  # every subject constant across conditions: no differences, Q is 0/0
+        return 0.0
+    return float(cochrans_q(mat).statistic) / (n * (k - 1))
+
+
 def hedges_g(x, y, conf=0.95):
     n1, n2 = len(x), len(y)
     sp = math.sqrt(((n1 - 1) * np.var(x, ddof=1) + (n2 - 1) * np.var(y, ddof=1)) / (n1 + n2 - 2))

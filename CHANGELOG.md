@@ -2,6 +2,11 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado [SemVer](https://semver.org/lang/es/).
 
+## [Sin publicar] / [Unreleased]
+
+### Añadido / Added
+- IC 95% para ω² en el ANOVA de Welch (inversión de la F no central con los gl de Welch; Steiger, 2004), IC 95% exacto (Clopper-Pearson) para la g de Cohen en McNemar, y tamaño del efecto η²_Q = Q / [N(k − 1)] (Serlin et al., 1982) con IC 95% bootstrap para la Q de Cochran; el informe indica cómo se calculó cada intervalo (#7) / 95% CIs for Welch's ANOVA ω² and McNemar's Cohen's g, and η²_Q with bootstrap CI for Cochran's Q.
+
 ## [0.2.0] - 2026-10-21
 
 ### Añadido / Added
