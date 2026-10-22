@@ -428,7 +428,12 @@ def _oneway(d, df, res, outdir):
         df2 = (k ** 2 - 1) / (3 * tmp)
         p = stats.f.sf(F, k - 1, df2)
         om = max(0.0, (k - 1) * (F - 1) / ((k - 1) * (F - 1) + n))
-        res.rows.append(_row(d.iv_name, "F", f"{k - 1}, {df2:.2f}", F, p, "ω²", om, None, bounded=True))
+        res.rows.append(_row(d.iv_name, "F", f"{k - 1}, {df2:.2f}", F, p, "ω²", om,
+                             E.omega2_welch_ci(F, k - 1, df2, n), bounded=True))
+        res.notes.append(("El IC 95% de ω² se obtuvo invirtiendo la distribución F no central con los grados de libertad de Welch "
+                          "(Steiger, 2004); es aproximado porque la F de Welch solo sigue aproximadamente esa distribución.",
+                          "The 95% CI for ω² was obtained by inverting the noncentral F distribution with Welch's degrees of freedom "
+                          "(Steiger, 2004); it is approximate because Welch's F only approximately follows that distribution."))
         if p < d.alpha:
             res.posthoc, res.posthoc_method = _games_howell(g), "Games-Howell"
     else:
@@ -692,9 +697,14 @@ def _mcnemar(d, df, res, outdir):
     b, c = tab.loc[0, 1], tab.loc[1, 0]
     exact = (b + c) < 25
     r = mcnemar(tab.values, exact=exact, correction=True)
-    gC = abs(b / (b + c) - .5) if b + c else 0.0
+    gC, ci = E.cohen_g_mcnemar(int(b), int(c))
     res.rows.append(_row(f"{cols[0]} vs {cols[1]}", "binomial" if exact else "χ²", None if exact else "1",
-                         r.statistic, r.pvalue, "g_C", gC, None, bounded=True))
+                         r.statistic, r.pvalue, "g_C", gC, ci, bounded=True))
+    if b + c:
+        res.notes.append(("El IC 95% de la g de Cohen se calculó a partir del intervalo exacto de Clopper-Pearson para la proporción "
+                          "de pares discordantes (Clopper y Pearson, 1934).",
+                          "The 95% CI for Cohen's g was derived from the exact Clopper-Pearson interval for the proportion of "
+                          "discordant pairs (Clopper & Pearson, 1934)."))
     tab.columns.name = cols[1]
     res.figures.append(_plot_bars(tab, outdir))
 
@@ -704,7 +714,13 @@ def _cochran(d, df, res, outdir):
     mat = np.column_stack([_binary(df[c]) for c in cols])
     res.descriptives = pd.DataFrame({"condicion/condition": d.levels, "n": len(mat), "proporción/proportion": mat.mean(axis=0)})
     r = cochrans_q(mat)
-    res.rows.append(_row(d.iv_name, "Q", f"{r.df}", r.statistic, r.pvalue))
+    eq = E.eta2_q(mat)
+    ci = E.bootstrap_ci(E.eta2_q, [mat], n_boot=1000)
+    res.rows.append(_row(d.iv_name, "Q", f"{r.df}", r.statistic, r.pvalue, "η²_Q", eq, ci, bounded=True))
+    res.notes.append(("Tamaño del efecto: η²_Q = Q / [N(k − 1)] (Serlin et al., 1982), con IC 95% bootstrap percentil "
+                      "(1000 remuestreos de participantes).",
+                      "Effect size: η²_Q = Q / [N(k − 1)] (Serlin et al., 1982), with a 95% percentile bootstrap CI "
+                      "(1000 resamples of participants)."))
     res.figures.append(_plot_profiles(mat.astype(float), d.levels, "p(1)", outdir))
 
 
