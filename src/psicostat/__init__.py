@@ -1,5 +1,5 @@
 """PsicoStat: asistente open source de metodología y análisis estadístico para psicología."""
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 from .analysis import analyze  # noqa: F401
 from .design import Design, recommend  # noqa: F401
 from .power import sample_size  # noqa: F401
