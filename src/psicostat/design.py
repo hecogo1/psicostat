@@ -177,7 +177,11 @@ def recommend(d: Design) -> Recommendation:
                                 "One between- and one within-subjects factor; Greenhouse-Geisser is applied if sphericity is violated.")])
     if d.design == "within":
         if d.n_factors == 2:
-            return Recommendation("anova_rm", None, "f", [N, S, "a_outliers"])
+            return Recommendation("anova_rm", None, "f", [N, S, "a_outliers"],
+                                  [("La esfericidad se evalúa para cada efecto (los dos factores y su interacción); "
+                                    "si se viola, se aplica la corrección de Greenhouse-Geisser a ese efecto.",
+                                    "Sphericity is assessed for each effect (both factors and their interaction); "
+                                    "if violated, the Greenhouse-Geisser correction is applied to that effect.")])
         if d.n_groups == 2:
             if ordinal:
                 return Recommendation("wilcoxon", None, "d", ["a_outliers"])
