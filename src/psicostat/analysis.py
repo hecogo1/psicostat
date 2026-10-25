@@ -119,23 +119,46 @@ def _outliers(groups: dict):
     return {"key": "a_outliers", "detail": f"{n_out}", "p": None, "ok": n_out == 0}
 
 
+def _orth_contrasts(k):
+    """k x (k - 1) orthonormal contrasts (columns orthogonal to the unit vector)."""
+    return np.linalg.qr(np.column_stack([np.ones(k), np.eye(k)[:, :k - 1]]))[0][:, 1:]
+
+
+def _sphericity(z, k=None):
+    """Mauchly's W and p, and the Greenhouse-Geisser and Huynh-Feldt epsilons for one within-subjects effect.
+
+    `z` is the n x p matrix of orthonormal-contrast scores of the effect (p = effect df) and `k` the total
+    number of repeated-measures cells (ka·kb in a two-way design; default p + 1). The p value includes the
+    second-order term of R `mauchly.test` / `car::Anova` (hence afex and JASP); ε_HF is the Huynh-Feldt
+    formula used by R `car`, truncated to 1.
+    """
+    n, p = z.shape
+    if p < 2:
+        return 1.0, np.nan, 1.0, 1.0
+    k = p + 1 if k is None else k
+    df = n - 1
+    m = np.cov(z, rowvar=False)
+    tr = np.trace(m)
+    sign, logdet = np.linalg.slogdet(m)
+    logw = logdet - p * np.log(tr / p) if sign > 0 else -np.inf
+    rho = 1 - (2 * p ** 2 + p + 2) / (6 * p * df)
+    w2 = (p + 2) * (p - 1) * (p - 2) * (2 * p ** 3 + 6 * p ** 2 + 3 * k + 2) / (288 * (df * p * rho) ** 2)
+    chi = -df * rho * logw
+    f = p * (p + 1) / 2 - 1
+    p1, p2 = stats.chi2.sf(chi, f), stats.chi2.sf(chi, f + 4)
+    pval = float(np.clip(p1 + w2 * (p2 - p1), 0, 1))
+    gg = min(max(tr ** 2 / (p * np.trace(m @ m)), 1 / p), 1.0)
+    hf = min((n * p * gg - 2) / (p * (df - p * gg)), 1.0)
+    return float(np.exp(logw)), pval, gg, hf
+
+
 def _mauchly(mat):
     """Mauchly's test and Greenhouse-Geisser epsilon for an n x k matrix."""
-    n, k = mat.shape
+    k = mat.shape[1]
     if k < 3:
         return 1.0, np.nan, 1.0
-    c = np.linalg.qr(np.column_stack([np.ones(k), np.eye(k)[:, :k - 1]]))[0][:, 1:]
-    s = np.cov(mat, rowvar=False)
-    m = c.T @ s @ c
-    p = k - 1
-    tr = np.trace(m)
-    w = np.linalg.det(m) / (tr / p) ** p
-    d = 1 - (2 * p ** 2 + p + 2) / (6 * p * (n - 1))
-    chi = -(n - 1) * d * np.log(max(w, 1e-300))
-    df = p * (p + 1) / 2 - 1
-    pval = stats.chi2.sf(chi, df)
-    eps = tr ** 2 / (p * np.trace(m @ m))
-    return w, pval, min(max(eps, 1 / p), 1.0)
+    w, pval, gg, _ = _sphericity(mat @ _orth_contrasts(k))
+    return w, pval, gg
 
 
 def _games_howell(groups: dict):
@@ -572,18 +595,31 @@ def _rm_two(d, df, res, outdir):
     long = pd.DataFrame(long)
     res.descriptives = _desc({f"{la}·{lb}": long.loc[(long[a] == la) & (long[b] == lb), y] for la in d.levels for lb in d.levels_b})
     tab = AnovaRM(long, y, "id", within=[a, b]).fit().anova_table
+    # n x (ka·kb) matrix (columns: a1b1, a1b2, ..., a2b1, ...) and orthonormal contrasts per effect
+    wide = long.pivot_table(index="id", columns=[a, b], values=y).reindex(columns=pd.MultiIndex.from_product([d.levels, d.levels_b]))
+    ka, kb = len(d.levels), len(d.levels_b)
+    ca, cb = _orth_contrasts(ka), _orth_contrasts(kb)
+    contrasts = {a: np.kron(ca, np.ones((kb, 1)) / np.sqrt(kb)), b: np.kron(np.ones((ka, 1)) / np.sqrt(ka), cb),
+                 f"{a}:{b}": np.kron(ca, cb)}
+    corrected = []
     for term, lab in ((a, a), (b, b), (f"{a}:{b}", f"{a} × {b}")):
-        F, df1, df2, p = tab.loc[term, "F Value"], tab.loc[term, "Num DF"], tab.loc[term, "Den DF"], tab.loc[term, "Pr > F"]
-        eta = F * df1 / (F * df1 + df2)
-        res.rows.append(_row(lab, "F", f"{int(df1)}, {int(df2)}", F, p, "η²p", eta, E.partial_eta2_ci(F, df1, df2), bounded=True))
-    for la, lb in ((a, d.levels), (b, d.levels_b)):
-        if len(lb) > 2:
-            mat = long.pivot_table(index="id", columns=la, values=y).to_numpy()
-            W, pm, eps = _mauchly(mat)
-            res.assumptions.append({"key": "a_sphericity", "detail": f"{la}: W = {E.fmt_num(W, True, 3)}, {E.fmt_p(pm)}",
+        F, df1, df2 = tab.loc[term, "F Value"], tab.loc[term, "Num DF"], tab.loc[term, "Den DF"]
+        eps = 1.0
+        if df1 > 1:
+            W, pm, gg, hf = _sphericity(wide.to_numpy() @ contrasts[term], ka * kb)
+            res.assumptions.append({"key": "a_sphericity", "detail": f"{lab}: W = {E.fmt_num(W, True, 3)}, {E.fmt_p(pm)}; "
+                                                                     f"ε_GG = {E.fmt_num(gg, True, 3)}, ε_HF = {E.fmt_num(hf, True, 3)}",
                                     "p": pm, "ok": not pm < .05})
-    res.notes.append(("ANOVA de dos factores intra sujetos sin corrección de esfericidad automática (v0.1).",
-                      "Two-way within-subjects ANOVA without automatic sphericity correction (v0.1)."))
+            if pm < .05:
+                eps = gg
+                corrected.append(f"{lab}: ε = {eps:.3f}")
+        p = stats.f.sf(F, df1 * eps, df2 * eps)
+        dfs = f"{int(df1)}, {int(df2)}" if eps == 1 else f"{df1 * eps:.2f}, {df2 * eps:.2f}"
+        eta = F * df1 / (F * df1 + df2)
+        res.rows.append(_row(lab, "F", dfs, F, p, "η²p", eta, E.partial_eta2_ci(F, df1, df2), bounded=True))
+    if corrected:
+        res.notes.append((f"Se aplicó la corrección de Greenhouse-Geisser a los efectos que violaron la esfericidad ({'; '.join(corrected)}).",
+                          f"The Greenhouse-Geisser correction was applied to the effects that violated sphericity ({'; '.join(corrected)})."))
     means = long.pivot_table(index=a, columns=b, values=y, aggfunc="mean")
     ses = long.pivot_table(index=a, columns=b, values=y, aggfunc=lambda s: s.std(ddof=1) / np.sqrt(len(s)))
     res.figures.append(_plot_interaction(means, ses, b, y, outdir))

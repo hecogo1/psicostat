@@ -6,6 +6,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 
 ### Añadido / Added
 - IC 95% para ω² en el ANOVA de Welch (inversión de la F no central con los gl de Welch; Steiger, 2004), IC 95% exacto (Clopper-Pearson) para la g de Cohen en McNemar, y tamaño del efecto η²_Q = Q / [N(k − 1)] (Serlin et al., 1982) con IC 95% bootstrap para la Q de Cochran; el informe indica cómo se calculó cada intervalo (#7) / 95% CIs for Welch's ANOVA ω² and McNemar's Cohen's g, and η²_Q with bootstrap CI for Cochran's Q.
+- Corrección de esfericidad en el ANOVA con dos factores intra sujetos: prueba de Mauchly, ε de Greenhouse-Geisser y de Huynh-Feldt para cada efecto (A, B y la interacción A × B, mediante contrastes ortonormales), y corrección de Greenhouse-Geisser de los gl y la p en los efectos que violan la esfericidad; validado frente a pingouin (equivalente a R `car`/`afex`) (#3) / Per-effect sphericity (Mauchly, ε_GG, ε_HF) and Greenhouse-Geisser correction in two-way within-subjects ANOVA.
+
+### Cambiado / Changed
+- La p de la prueba de Mauchly incluye el término de segundo orden de R `mauchly.test`, de modo que coincide con R/afex/JASP también con 4 o más condiciones / Mauchly's p now includes R's second-order term.
 
 ## [0.2.0] - 2026-10-21
 
