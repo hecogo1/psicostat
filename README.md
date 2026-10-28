@@ -115,7 +115,7 @@ Ver [`examples/`](examples/) para informes completos generados con los datos de 
 | 2 grupos independientes | t de Welch por defecto (Delacre et al., 2017) |
 | Normalidad violada y n < 30 por grupo | Alternativa no paramétrica automática |
 | ANOVA con varianzas heterogéneas | ANOVA de Welch + Games-Howell |
-| Esfericidad violada (Mauchly p < .05) | Corrección de Greenhouse-Geisser; con dos factores intra sujetos, por efecto (A, B y A × B), informando ε_GG y ε_HF |
+| Esfericidad violada (Mauchly p < .05) | Corrección de Greenhouse-Geisser; con dos factores intra sujetos, por efecto (A, B y A × B), informando ε_GG y ε_HF; en el ANOVA mixto, con la matriz de covarianzas intragrupo combinada (N − G gl) |
 | 2×2 con esperadas < 5 | Prueba exacta de Fisher |
 | Heterocedasticidad en regresión | Errores típicos HC3 |
 | Pruebas de rangos | N a priori ÷ 0.864 (eficiencia relativa asintótica) |
