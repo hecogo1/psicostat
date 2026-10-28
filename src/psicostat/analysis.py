@@ -124,20 +124,22 @@ def _orth_contrasts(k):
     return np.linalg.qr(np.column_stack([np.ones(k), np.eye(k)[:, :k - 1]]))[0][:, 1:]
 
 
-def _sphericity(z, k=None):
+def _sphericity(z, k=None, df=None):
     """Mauchly's W and p, and the Greenhouse-Geisser and Huynh-Feldt epsilons for one within-subjects effect.
 
     `z` is the n x p matrix of orthonormal-contrast scores of the effect (p = effect df) and `k` the total
-    number of repeated-measures cells (ka·kb in a two-way design; default p + 1). The p value includes the
-    second-order term of R `mauchly.test` / `car::Anova` (hence afex and JASP); ε_HF is the Huynh-Feldt
-    formula used by R `car`, truncated to 1.
+    number of repeated-measures cells (ka·kb in a two-way design; default p + 1). `df` is the error df of
+    the covariance matrix: n − 1 (default) for a single group, N − G for the pooled within-group matrix of a
+    mixed design (pass scores already centred within each group). The p value includes the second-order
+    term of R `mauchly.test` / `car::Anova` (hence afex and JASP); ε_HF is the Huynh-Feldt formula used by
+    R `car`, ((df + 1)·p·ε_GG − 2) / [p·(df − p·ε_GG)], truncated to 1.
     """
     n, p = z.shape
     if p < 2:
         return 1.0, np.nan, 1.0, 1.0
     k = p + 1 if k is None else k
-    df = n - 1
-    m = np.cov(z, rowvar=False)
+    df = n - 1 if df is None else df
+    m = np.cov(z, rowvar=False, ddof=n - df)
     tr = np.trace(m)
     sign, logdet = np.linalg.slogdet(m)
     logw = logdet - p * np.log(tr / p) if sign > 0 else -np.inf
@@ -148,7 +150,7 @@ def _sphericity(z, k=None):
     p1, p2 = stats.chi2.sf(chi, f), stats.chi2.sf(chi, f + 4)
     pval = float(np.clip(p1 + w2 * (p2 - p1), 0, 1))
     gg = min(max(tr ** 2 / (p * np.trace(m @ m)), 1 / p), 1.0)
-    hf = min((n * p * gg - 2) / (p * (df - p * gg)), 1.0)
+    hf = min(((df + 1) * p * gg - 2) / (p * (df - p * gg)), 1.0)
     return float(np.exp(logw)), pval, gg, hf
 
 
@@ -646,11 +648,12 @@ def _mixed(d, df, res, outdir):
     ss_err = ss_ws - ss_b - ss_ab
     df_a, df_sa = G - 1, N - G
     df_b, df_ab, df_err = k - 1, (G - 1) * (k - 1), (N - G) * (k - 1)
-    # sphericity on within factor (pooled within groups)
-    centered = np.vstack([mat[grp == g] - mat[grp == g].mean(axis=0) for g in glevels]) + cm
-    W, pm, eps = _mauchly(centered)
-    if not pm < .05:
-        eps = 1.0
+    # sphericity on the within factor: pooled within-group covariance with N − G error df (car::Anova, afex, SPSS)
+    W, pm, gg, hf = 1.0, np.nan, 1.0, 1.0
+    if k > 2:
+        centered = np.vstack([mat[grp == g] - mat[grp == g].mean(axis=0) for g in glevels])
+        W, pm, gg, hf = _sphericity(centered @ _orth_contrasts(k), df=N - G)
+    eps = gg if pm < .05 else 1.0
     cells = {f"{g}·{lb}": mat[grp == g, j] for g in glevels for j, lb in enumerate(d.levels_b)}
     res.descriptives = _desc(cells)
     resid = np.concatenate([(mat[grp == g] - mat[grp == g].mean(axis=0)).ravel() for g in glevels])
@@ -660,7 +663,8 @@ def _mixed(d, df, res, outdir):
         lv = _levene([mat[grp == g, j] for g in glevels])
         lv["detail"] = f"{lb}: " + lv["detail"]
         res.assumptions.append(lv)
-    res.assumptions.append({"key": "a_sphericity", "detail": f"W = {E.fmt_num(W, True, 3)}, {E.fmt_p(pm)}" if k > 2 else "k = 2",
+    res.assumptions.append({"key": "a_sphericity", "detail": f"W = {E.fmt_num(W, True, 3)}, {E.fmt_p(pm)}; ε_GG = {E.fmt_num(gg, True, 3)}, "
+                                                             f"ε_HF = {E.fmt_num(hf, True, 3)}" if k > 2 else "k = 2",
                             "p": pm if k > 2 else None, "ok": not pm < .05})
     for lab, ss, df1, sse, df2, e in ((a, ss_a, df_a, ss_sa, df_sa, 1.0), (d.factor_b_name, ss_b, df_b, ss_err, df_err, eps),
                                       (f"{a} × {d.factor_b_name}", ss_ab, df_ab, ss_err, df_err, eps)):

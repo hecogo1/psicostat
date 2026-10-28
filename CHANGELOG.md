@@ -2,6 +2,11 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado [SemVer](https://semver.org/lang/es/).
 
+## [Sin publicar] / Unreleased
+
+### Corregido / Fixed
+- ANOVA mixto: la prueba de Mauchly y las ε de Greenhouse-Geisser y Huynh-Feldt usan la matriz de covarianzas intragrupo combinada con N − G gl (antes N − 1), lo que daba una p de Mauchly demasiado pequeña y sesgaba ε_HF; el informe muestra ahora también ε_GG y ε_HF. Validado frente a R `car::Anova` (equivalente a afex/SPSS) con grupos equilibrados y no equilibrados (#18) / Mixed ANOVA: Mauchly's test and the GG/HF epsilons now use the pooled within-group covariance with N − G df instead of N − 1; ε_GG and ε_HF are now reported.
+
 ## [0.3.0] - 2026-10-25
 
 ### Añadido / Added
