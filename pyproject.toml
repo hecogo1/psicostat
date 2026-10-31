@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "psicostat"
-version = "0.3.0"
+version = "0.3.1"
 description = "Asistente open source de metodología y análisis estadístico (APA 7) para psicología / Open-source methods & statistics assistant for psychology"
 readme = "README.md"
 license = {text = "MIT"}
