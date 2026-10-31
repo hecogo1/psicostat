@@ -5,6 +5,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 ## [Sin publicar] / Unreleased
 
 ### Corregido / Fixed
+- ANOVA mixto con grupos de distinto tamaño: el efecto intra sujetos usa sumas de cuadrados de tipo III (media no ponderada de los perfiles de cada grupo, como SPSS y R `afex`), en lugar de SC ponderadas; el aviso «sumas de cuadrados aproximadas» se sustituye por una nota que indica el tipo III. El efecto entre grupos, la interacción y los términos de error no cambian. Validado frente a R `car::Anova(type = 3)`/`afex::aov_ez` con grupos 6/5/4 y 6/3/2 (#4) / Mixed ANOVA with unequal group sizes: the within-subjects effect now uses Type III sums of squares (as SPSS and R afex) instead of weighted SS.
 - ANOVA mixto: la prueba de Mauchly y las ε de Greenhouse-Geisser y Huynh-Feldt usan la matriz de covarianzas intragrupo combinada con N − G gl (antes N − 1), lo que daba una p de Mauchly demasiado pequeña y sesgaba ε_HF; el informe muestra ahora también ε_GG y ε_HF. Validado frente a R `car::Anova` (equivalente a afex/SPSS) con grupos equilibrados y no equilibrados (#18) / Mixed ANOVA: Mauchly's test and the GG/HF epsilons now use the pooled within-group covariance with N − G df instead of N − 1; ε_GG and ε_HF are now reported.
 
 ## [0.3.0] - 2026-10-25
