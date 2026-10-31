@@ -643,9 +643,16 @@ def _mixed(d, df, res, outdir):
     ss_t = ((mat - M) ** 2).sum()
     ss_ws = ss_t - ss_bs
     cm = mat.mean(axis=0)
-    ss_b = N * ((cm - M) ** 2).sum()
+    ss_b_weighted = N * ((cm - M) ** 2).sum()
     ss_ab = sum((grp == g).sum() * ((mat[grp == g].mean(axis=0) - mat[grp == g].mean() - cm + M) ** 2).sum() for g in glevels)
-    ss_err = ss_ws - ss_b - ss_ab
+    ss_err = ss_ws - ss_b_weighted - ss_ab
+    # Type III SS for the within factor (R car::Anova type 3 / afex / SPSS): it tests the unweighted mean of the
+    # group profiles, so with unequal n it uses the harmonic mean of the group sizes; identical to the
+    # weighted SS when groups are balanced. SS_A, SS_A×B and both error terms are the same for every SS type here.
+    n_g = np.array([(grp == g).sum() for g in glevels])
+    gm = np.vstack([mat[grp == g].mean(axis=0) for g in glevels])
+    um = gm.mean(axis=0)
+    ss_b = G ** 2 / (1 / n_g).sum() * ((um - um.mean()) ** 2).sum()
     df_a, df_sa = G - 1, N - G
     df_b, df_ab, df_err = k - 1, (G - 1) * (k - 1), (N - G) * (k - 1)
     # sphericity on the within factor: pooled within-group covariance with N − G error df (car::Anova, afex, SPSS)
@@ -675,9 +682,11 @@ def _mixed(d, df, res, outdir):
     if eps < 1:
         res.notes.append((f"Efectos intra sujetos con corrección de Greenhouse-Geisser (ε = {eps:.3f}).",
                           f"Within-subjects effects with Greenhouse-Geisser correction (ε = {eps:.3f})."))
-    if len(set(int((grp == g).sum()) for g in glevels)) > 1:
-        res.notes.append(("Grupos no equilibrados: las sumas de cuadrados son aproximadas (v0.1).",
-                          "Unbalanced groups: sums of squares are approximate (v0.1)."))
+    if len(set(n_g.tolist())) > 1:
+        res.notes.append(("Grupos de distinto tamaño: se usaron sumas de cuadrados de tipo III (como SPSS y R afex), "
+                          "que dan el mismo peso a cada grupo en el efecto intra sujetos.",
+                          "Unequal group sizes: Type III sums of squares were used (as in SPSS and R afex), "
+                          "which weight each group equally in the within-subjects effect."))
     if res.rows[2]["p"] < d.alpha:
         rows = []
         for j, lb in enumerate(d.levels_b):
