@@ -844,6 +844,19 @@ def _linreg(d, df, res, outdir):
         res.figures.append(_plot_scatter(X.iloc[:, 0].to_numpy(), y, X.columns[0], d.dv_name, outdir))
 
 
+def _auc_label(auc):
+    """Qualitative label for AUC (Hosmer, Lemeshow & Sturdivant, 2013, p. 177)."""
+    if auc >= .9:
+        return "excepcional", "outstanding"
+    if auc >= .8:
+        return "excelente", "excellent"
+    if auc >= .7:
+        return "aceptable", "acceptable"
+    if auc > .5:
+        return "pobre", "poor"
+    return "nula (no mejor que el azar)", "none (no better than chance)"
+
+
 def _logreg(d, df, res, outdir):
     raw = df[d.dv_name].astype(str).str.strip()
     lv = sorted(raw.unique())
@@ -873,9 +886,21 @@ def _logreg(d, df, res, outdir):
         if i > 0:
             res.rows.append(_row(name, "z", None, z, p, "OR", np.exp(b), (np.exp(ci[i, 0]), np.exp(ci[i, 1]))))
     res.extra_tables["coefficients"] = pd.DataFrame(coef)
-    acc = ((model.predict(Xc) >= .5).astype(int) == y).mean()
+    prob = np.asarray(model.predict(Xc))
+    acc = ((prob >= .5).astype(int) == y).mean()
+    auc, (auc_lo, auc_hi) = E.auc_delong(y, prob)
     res.extra_tables["model"] = pd.DataFrame([{"χ²(LR)": model.llr, "gl/df": k, "p": model.llr_pvalue, "R²_McFadden": model.prsquared,
-                                               "R²_Nagelkerke": r2_n, "% correcto/correct": acc * 100}])
+                                               "R²_Nagelkerke": r2_n, "% correcto/correct": acc * 100,
+                                               "AUC": auc, "AUC_IC95_inf": auc_lo, "AUC_IC95_sup": auc_hi}])
+    if np.isfinite(auc):
+        lab_es, lab_en = _auc_label(auc)
+        a, lo, hi = (E.fmt_num(v, True) for v in (auc, auc_lo, auc_hi))
+        res.notes.append((f"Capacidad discriminativa del modelo: área bajo la curva ROC, AUC = {a}, IC 95% [{lo}, {hi}] "
+                          f"(DeLong et al., 1988); discriminación {lab_es} (Hosmer et al., 2013). "
+                          f"Una AUC de .50 equivale a clasificar al azar.",
+                          f"Model discrimination: area under the ROC curve, AUC = {a}, 95% CI [{lo}, {hi}] "
+                          f"(DeLong et al., 1988); {lab_en} discrimination (Hosmer et al., 2013). "
+                          f"An AUC of .50 means chance-level classification."))
     if d.iv_type != "nominal":
         fig, ax = plt.subplots(figsize=(5, 4))
         x0 = X.iloc[:, 0].to_numpy()

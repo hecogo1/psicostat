@@ -106,6 +106,29 @@ def r_ci(r, n, conf=0.95, spearman=False):
     return math.tanh(math.atanh(r) - z * se), math.tanh(math.atanh(r) + z * se)
 
 
+def auc_delong(y, score, conf=0.95):
+    """Area under the ROC curve (AUC) with DeLong et al.'s (1988) nonparametric CI.
+
+    y: 0/1 outcome (1 = event); score: predicted probability or any continuous predictor
+    (higher = more likely event). Ties count 1/2. Same estimator and interval as R pROC
+    (ci.auc, method = "delong"): AUC ± z·SE, truncated to [0, 1].
+    """
+    y = np.asarray(y).astype(int)
+    score = np.asarray(score, float)
+    pos, neg = score[y == 1], score[y == 0]
+    m, n = len(pos), len(neg)
+    if m < 2 or n < 2:
+        return float("nan"), (float("nan"), float("nan"))
+    r_all = stats.rankdata(np.r_[pos, neg])
+    # structural components (placement values): V10_i = P(neg < pos_i), V01_j = P(pos > neg_j)
+    v10 = (r_all[:m] - stats.rankdata(pos)) / n
+    v01 = 1 - (r_all[m:] - stats.rankdata(neg)) / m
+    auc = float(v10.mean())
+    se = math.sqrt(np.var(v10, ddof=1) / m + np.var(v01, ddof=1) / n)
+    z = stats.norm.ppf(1 - (1 - conf) / 2)
+    return auc, (max(0.0, auc - z * se), min(1.0, auc + z * se))
+
+
 def bootstrap_ci(fn, arrays, n_boot=2000, conf=0.95, seed=42, paired=False):
     rng = np.random.default_rng(seed)
     vals = []

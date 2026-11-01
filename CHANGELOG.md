@@ -4,6 +4,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 
 ## [Sin publicar] / Unreleased
 
+### Añadido / Added
+- Regresión logística: capacidad discriminativa del modelo con el área bajo la curva ROC (AUC) y su IC 95% no paramétrico de DeLong et al. (1988), en la tabla «Ajuste del modelo» y en el texto de resultados con una etiqueta cualitativa (Hosmer et al., 2013); validado frente a R `pROC::ci.auc` (#22) / Logistic regression: model discrimination via ROC AUC with DeLong 95% CI, validated against R pROC.
+
 ## [0.3.1] - 2026-10-31
 
 ### Corregido / Fixed
