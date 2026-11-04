@@ -66,3 +66,16 @@ def test_one_sided_option_in_ui():
     at.button(key="run").click().run()
     assert not at.exception
     assert "(unilateral)" in " ".join(m.value for m in at.markdown)
+
+
+def test_ordinal_regression_in_ui():
+    at = _app()
+    at.selectbox(key="k_example").set_value("ordinal").run()
+    at.button(key="nav_1").click().run()
+    assert not at.exception
+    assert at.text_input(key="k_dv_levels").value == "1, 2, 3, 4, 5"
+    at.button(key="nav_5").click().run()
+    at.button(key="run").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "ordinal" in html and "OR = " in html

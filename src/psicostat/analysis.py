@@ -16,6 +16,7 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from cycler import cycler
 from scipy import stats
+from statsmodels.miscmodels.ordinal_model import OrderedModel
 from statsmodels.stats.anova import AnovaRM, anova_lm
 from statsmodels.stats.contingency_tables import cochrans_q, mcnemar
 from statsmodels.stats.diagnostic import het_breuschpagan
@@ -347,6 +348,8 @@ def analyze(d: Design, data, outdir=None) -> Result:
         numeric_cols = []
     if rec.test in ("linreg", "logreg") and d.iv_type == "nominal":
         numeric_cols = [d.dv_name] if rec.test == "linreg" else []
+    if rec.test == "ordreg":
+        numeric_cols = [] if d.iv_type == "nominal" else [c for c in numeric_cols if c != d.dv_name]
     for c in numeric_cols:
         df[c] = _num(df, c)
     df = df.replace("", np.nan).dropna(subset=[c for c in need if c != "id"])
@@ -360,7 +363,7 @@ def analyze(d: Design, data, outdir=None) -> Result:
         "anova_factorial": _factorial, "ancova": _ancova,
         "anova_rm": _rm, "friedman": _rm, "anova_mixed": _mixed,
         "chi2": _chi2, "fisher": _chi2, "mcnemar": _mcnemar, "cochran": _cochran,
-        "pearson": _corr, "spearman": _corr, "linreg": _linreg, "logreg": _logreg,
+        "pearson": _corr, "spearman": _corr, "linreg": _linreg, "logreg": _logreg, "ordreg": _ordreg,
     }[rec.test]
     fn(d, df, res, outdir)
     return res
@@ -910,3 +913,196 @@ def _logreg(d, df, res, outdir):
         ax.set_xlabel(X.columns[0])
         ax.set_ylabel(f"P({d.dv_name} = 1)")
         res.figures.append(_save(fig, outdir, "fig_logistica.png"))
+
+
+# ------------------------------------------------------------------ ordinal (proportional-odds) regression
+def _ordinal_codes(raw: pd.Series, levels):
+    """Map an ordinal DV to codes 0..J-1 following `levels` (lowest to highest); numeric values match numerically."""
+    raw = raw.astype(str).str.strip()
+    levels = [str(x).strip() for x in levels]
+    lut = {lv: i for i, lv in enumerate(levels)}
+    codes = raw.map(lut)
+    if codes.isna().any():
+        num_lv, num_raw = pd.to_numeric(pd.Series(levels), errors="coerce"), pd.to_numeric(raw, errors="coerce")
+        if num_lv.notna().all() and num_raw.notna().all():
+            codes = num_raw.map({float(v): i for i, v in enumerate(num_lv)})
+    if codes.isna().any():
+        bad = sorted(set(raw[codes.isna()]))[:10]
+        raise DataError(f"Valores de la VD no incluidos en sus categorías {levels} / DV values not in its categories: {bad}")
+    return codes.to_numpy(int)
+
+
+def _fit_ordinal(y, X):
+    """Proportional-odds (cumulative logit) model, parameterised as R MASS::polr / Stata ologit:
+    logit P(Y <= j) = τ_j − xβ. Newton-Raphson with a BFGS fallback."""
+    mod = OrderedModel(y, X, distr="logit")
+    fit = None
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for method, kw in (("newton", {"maxiter": 200}), ("bfgs", {"maxiter": 5000, "gtol": 1e-8})):
+            try:
+                f = mod.fit(method=method, disp=0, **kw)
+            except (np.linalg.LinAlgError, ValueError):
+                continue
+            if np.all(np.isfinite(np.asarray(f.bse))) and (fit is None or f.llf > fit.llf + 1e-9):
+                fit = f
+            if f.mle_retvals.get("converged", False) and np.all(np.isfinite(np.asarray(f.bse))):
+                break
+    if fit is None:
+        raise DataError("El modelo ordinal no convergió (¿separación o categorías vacías?) / the ordinal model did not converge")
+    return fit
+
+
+def brant_test(y, X):
+    """Brant (1990) Wald test of the proportional-odds (parallel lines) assumption.
+
+    Fits the J − 1 binary logits of Y > j and tests that their slopes are equal, overall (gl = K(J − 2)) and for each
+    predictor (gl = J − 2), as Stata `brant` (Long & Freese) and R `brant::brant`. Returns (overall, per_variable, betas)
+    with overall/per_variable entries (χ², df, p)."""
+    y = np.asarray(y, int)
+    Xc = np.column_stack([np.ones(len(y)), np.asarray(X, float)])
+    K = Xc.shape[1] - 1
+    M = int(y.max())                       # number of binary splits (J − 1)
+    betas, pis = [], []
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for j in range(M):
+            f = sm.Logit((y > j).astype(int), Xc).fit(disp=0, maxiter=200)
+            betas.append(np.asarray(f.params))
+            pis.append(np.asarray(f.predict(Xc)))
+    inv = [np.linalg.inv(Xc.T @ (Xc * (p * (1 - p))[:, None])) for p in pis]
+    V = np.zeros((M * K, M * K))
+    for a in range(M):
+        for b in range(a, M):
+            w = pis[b] - pis[a] * pis[b]   # Cov of indicators Y > a and Y > b (b ≥ a)
+            v = (inv[a] @ (Xc.T @ (Xc * w[:, None])) @ inv[b])[1:, 1:]
+            V[a * K:(a + 1) * K, b * K:(b + 1) * K] = v
+            V[b * K:(b + 1) * K, a * K:(a + 1) * K] = v.T
+    bstar = np.concatenate([b[1:] for b in betas])
+    D = np.zeros(((M - 1) * K, M * K))
+    for r in range(M - 1):
+        D[r * K:(r + 1) * K, :K] = np.eye(K)
+        D[r * K:(r + 1) * K, (r + 1) * K:(r + 2) * K] = -np.eye(K)
+
+    def wald(Dm):
+        db = Dm @ bstar
+        chi = float(db @ np.linalg.pinv(Dm @ V @ Dm.T) @ db)
+        df = Dm.shape[0]
+        return chi, df, float(stats.chi2.sf(chi, df))
+
+    overall = wald(D)
+    per = [wald(D[[r * K + k for r in range(M - 1)]]) for k in range(K)]
+    return overall, per, betas
+
+
+def _plot_ordinal(x, X, params, thresholds, k_col, levels, xlabel, outdir, name="fig_ordinal.png"):
+    """Predicted probability of each DV category along the first predictor (others at their mean)."""
+    xs = np.linspace(np.min(x), np.max(x), 100)
+    base = np.asarray(X.mean(), float)
+    eta = np.array([np.dot(np.where(np.arange(len(base)) == k_col, v, base), params) for v in xs])
+    cum = 1 / (1 + np.exp(-(np.asarray(thresholds)[None, :] - eta[:, None])))
+    cum = np.column_stack([np.zeros(len(xs)), cum, np.ones(len(xs))])
+    probs = np.diff(cum, axis=1)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    colors = plt.get_cmap("viridis")(np.linspace(.1, .85, len(levels)))
+    ax.stackplot(xs, probs.T, labels=[str(lv) for lv in levels], colors=colors, alpha=.85)
+    ax.set_xlim(xs[0], xs[-1])
+    ax.set_ylim(0, 1)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("P(categoría / category)")
+    ax.legend(frameon=False, loc="center left", bbox_to_anchor=(1, .5), title="VD/DV")
+    ax.spines[["top", "right"]].set_visible(False)
+    return _save(fig, outdir, name)
+
+
+def _ordreg(d, df, res, outdir):
+    levels = list(d.dv_levels)
+    y_all = _ordinal_codes(df[d.dv_name], levels)
+    present = sorted(set(y_all))
+    if len(present) < 3:
+        raise DataError("La VD ordinal necesita al menos 3 categorías observadas; con 2, usa la regresión logística binaria "
+                        "(VD nominal) / the ordinal DV needs at least 3 observed categories; with 2, use binary logistic regression")
+    used = [levels[i] for i in present]
+    remap = {c: i for i, c in enumerate(present)}
+    y = np.array([remap[c] for c in y_all])
+    X = _design_matrix(d, df)
+    if X.shape[1] == 0 or (X.std(ddof=0) == 0).any():
+        raise DataError("Algún predictor no varía / some predictor has no variance")
+    counts = np.bincount(y, minlength=len(used))
+    res.descriptives = pd.DataFrame({"categoría/category": used, "n": counts, "%": 100 * counts / len(y),
+                                     "% acumulado/cumulative": 100 * np.cumsum(counts) / len(y)})
+    if len(used) < len(levels):
+        miss = [lv for lv in levels if lv not in used]
+        res.notes.append((f"Categorías de la VD sin casos (se omiten del modelo): {', '.join(miss)}.",
+                          f"DV categories with no cases (omitted from the model): {', '.join(miss)}."))
+    fit = _fit_ordinal(y, X)
+    k, n, J = X.shape[1], len(y), len(used)
+    params = np.asarray(fit.params)
+    beta, bse = params[:k], np.asarray(fit.bse)[:k]
+    thr = np.asarray(fit.model.transform_threshold_params(fit.params))[1:-1]
+    # SE of thresholds by the delta method (statsmodels uses τ_1 and log-increments)
+    Jac = np.zeros((J - 1, J - 1))
+    Jac[:, 0] = 1
+    for j in range(1, J - 1):
+        Jac[j:, j] = np.exp(params[k + j])
+    cov = np.asarray(fit.cov_params())[k:, k:]
+    thr_se = np.sqrt(np.diag(Jac @ cov @ Jac.T))
+    ll0 = float(np.sum(counts * np.log(counts / n)))
+    llr = 2 * (fit.llf - ll0)
+    llr_p = float(stats.chi2.sf(llr, k))
+    r2_mf = 1 - fit.llf / ll0
+    r2_cs = 1 - np.exp(2 * (ll0 - fit.llf) / n)
+    r2_n = r2_cs / (1 - np.exp(2 * ll0 / n))
+    # assumptions
+    Xc = sm.add_constant(X)
+    vifs = [variance_inflation_factor(Xc.values, i) for i in range(1, Xc.shape[1])] if k > 1 else [1.0]
+    res.assumptions.append({"key": "a_multicollinearity", "detail": "VIF máx./max = " + f"{max(vifs):.2f}", "p": None, "ok": max(vifs) < 5})
+    try:
+        (chi, bdf, bp), per, _ = brant_test(y, X)
+    except np.linalg.LinAlgError:
+        chi, bdf, bp, per = np.nan, 0, np.nan, []
+    res.assumptions.append({"key": "a_proportional_odds", "detail": f"Brant: χ²({bdf}) = {chi:.2f}, {E.fmt_p(bp)}", "p": bp,
+                            "ok": not bp < .05})
+    if per:
+        res.extra_tables["brant"] = pd.DataFrame([{"término/term": "Global/Omnibus", "χ²": chi, "gl/df": bdf, "p": bp}] +
+                                                 [{"término/term": c, "χ²": v[0], "gl/df": v[1], "p": v[2]} for c, v in zip(X.columns, per)])
+    if bp < .05:
+        bad = [c for c, v in zip(X.columns, per) if v[2] < .05]
+        who = f" (predictor(es): {', '.join(bad)})" if bad else ""
+        res.notes.append((f"La prueba de Brant indica que no se cumple el supuesto de odds proporcionales{who}: el efecto podría "
+                          "diferir según el punto de corte de la VD. Interpreta las OR como un resumen promedio y considera un modelo "
+                          "de odds proporcionales parciales o una regresión logística multinomial.",
+                          f"The Brant test indicates that the proportional-odds assumption is not met{who}: the effect may differ "
+                          "across cut-points of the DV. Interpret the ORs as an average summary and consider a partial "
+                          "proportional-odds model or multinomial logistic regression."))
+    small = [used[i] for i in range(J) if counts[i] < 5]
+    if small:
+        res.notes.append((f"Categorías con menos de 5 casos ({', '.join(small)}): las estimaciones pueden ser inestables; "
+                          "valora agrupar categorías adyacentes.",
+                          f"Categories with fewer than 5 cases ({', '.join(small)}): estimates may be unstable; "
+                          "consider merging adjacent categories."))
+    # results
+    res.rows.append(_row("Modelo/Model", "χ²", f"{k}", llr, llr_p, "R²_N", r2_n, None, bounded=True))
+    z = stats.norm.ppf(.975)
+    coef = []
+    for i, name in enumerate(X.columns):
+        b, se = beta[i], bse[i]
+        zval = b / se
+        p = 2 * stats.norm.sf(abs(zval))
+        lo, hi = b - z * se, b + z * se
+        coef.append({"término/term": name, "B": b, "EE/SE": se, "z": zval, "p": p, "OR": np.exp(b),
+                     "OR_IC95_inf": np.exp(lo), "OR_IC95_sup": np.exp(hi)})
+        res.rows.append(_row(name, "z", None, zval, p, "OR", np.exp(b), (np.exp(lo), np.exp(hi))))
+    res.extra_tables["coefficients"] = pd.DataFrame(coef)
+    res.extra_tables["thresholds"] = pd.DataFrame([{"umbral/threshold": f"{used[j]} | {used[j + 1]}", "τ": thr[j], "EE/SE": thr_se[j]}
+                                                   for j in range(J - 1)])
+    res.extra_tables["model"] = pd.DataFrame([{"χ²(LR)": llr, "gl/df": k, "p": llr_p, "-2LL": -2 * fit.llf,
+                                               "R²_McFadden": r2_mf, "R²_Nagelkerke": r2_n}])
+    res.notes.append(("Modelo de odds proporcionales (logit acumulado), logit P(Y ≤ j) = τ_j − xβ: una OR > 1 indica mayor probabilidad "
+                      f"de puntuar en categorías más altas de {d.dv_name} por cada unidad del predictor (manteniendo constantes los demás), "
+                      "y la misma OR se aplica a todos los puntos de corte de la VD.",
+                      "Proportional-odds (cumulative logit) model, logit P(Y ≤ j) = τ_j − xβ: an OR > 1 indicates a higher probability "
+                      f"of scoring in higher categories of {d.dv_name} per unit of the predictor (holding the others constant), "
+                      "and the same OR applies to every cut-point of the DV."))
+    if d.iv_type != "nominal":
+        res.figures.append(_plot_ordinal(X.iloc[:, 0].to_numpy(float), X, beta, thr, 0, used, X.columns[0], outdir))

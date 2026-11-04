@@ -79,8 +79,13 @@ class Design:
             self.levels_b = [f"{pre}{i + 1}" for i in range(int(self.n_levels_b))]
         self.levels_b = [str(x) for x in self.levels_b]
         self.n_levels_b = len(self.levels_b)
+        if self.analysis == "regression" and self.dv_type == "ordinal":
+            # ordered categories of the DV, from lowest to highest (default: a 5-point Likert item)
+            if not self.dv_levels or [str(x).strip().lower() for x in self.dv_levels] in (["si", "no"], ["sí", "no"]):
+                self.dv_levels = ["1", "2", "3", "4", "5"]
         if not self.dv_levels:
             self.dv_levels = ["si", "no"]
+        self.dv_levels = [str(x).strip() for x in self.dv_levels]
         if not self.predictors:
             self.predictors = ["x1"]
         if self.alternative not in ALTERNATIVES:
@@ -165,6 +170,14 @@ def recommend(d: Design) -> Recommendation:
         if d.dv_type == "nominal":
             return Recommendation("logreg", None, "or", [indep, "a_multicollinearity", "a_epv"],
                                   [("VD dicotómica (0/1).", "Dichotomous DV (0/1).")])
+        if d.dv_type == "ordinal":
+            return Recommendation("ordreg", None, "or", [indep, "a_multicollinearity", "a_proportional_odds"],
+                                  [("VD ordinal (p. ej., un ítem Likert): modelo de odds proporcionales (logit acumulado); "
+                                    "el supuesto de odds proporcionales se evalúa con la prueba de Brant (1990). "
+                                    "Las escalas formadas por la suma de varios ítems suelen analizarse como cuantitativas.",
+                                    "Ordinal DV (e.g., a single Likert item): proportional-odds (cumulative logit) model; "
+                                    "the proportional-odds assumption is checked with the Brant (1990) test. "
+                                    "Scales formed by summing several items are usually analysed as quantitative.")])
         return Recommendation("linreg", None, "f2",
                               [indep, "a_linearity", N, "a_homoscedasticity", "a_multicollinearity", "a_independence"],
                               [("Si hay heterocedasticidad, se informan errores típicos robustos (HC3).",

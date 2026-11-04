@@ -13,10 +13,10 @@
 PsicoStat te guía paso a paso desde la pregunta de investigación hasta el texto de **Método** y **Resultados** en estilo **APA 7**, en español o inglés:
 
 1. **Asistente**: te pregunta el diseño (entre sujetos, intra sujetos, mixto, correlacional, regresión, asociación), número de grupos o condiciones, nivel de medida de las variables, covariables, tamaño del efecto esperado (con la guía de Cohen), α y potencia.
-2. **Prueba recomendada**: t de Welch, t pareada, Mann-Whitney, Wilcoxon, ANOVA de un factor / Welch / factorial / medidas repetidas / mixto, ANCOVA, Kruskal-Wallis, Friedman, chi-cuadrado / Fisher, McNemar, Q de Cochran, Pearson / Spearman, regresión lineal y logística; con supuestos a comprobar y alternativa no paramétrica.
+2. **Prueba recomendada**: t de Welch, t pareada, Mann-Whitney, Wilcoxon, ANOVA de un factor / Welch / factorial / medidas repetidas / mixto, ANCOVA, Kruskal-Wallis, Friedman, chi-cuadrado / Fisher, McNemar, Q de Cochran, Pearson / Spearman, regresión lineal, logística y logística ordinal (odds proporcionales); con supuestos a comprobar y alternativa no paramétrica.
 3. **Tamaño muestral a priori**, explicado y validado frente a G*Power.
 4. **Plantilla CSV** con las columnas exactas de tu diseño + **diccionario de datos**.
-5. **Análisis** del CSV relleno: descriptivos, supuestos (Shapiro-Wilk, Levene, Mauchly, Breusch-Pagan, VIF…), la prueba (con cambio automático a la alternativa si fallan los supuestos), **tamaños del efecto con IC 95%**, post hoc (Tukey, Games-Howell, Dunn, Holm) y gráficos.
+5. **Análisis** del CSV relleno: descriptivos, supuestos (Shapiro-Wilk, Levene, Mauchly, Breusch-Pagan, VIF, Brant…), la prueba (con cambio automático a la alternativa si fallan los supuestos), **tamaños del efecto con IC 95%**, post hoc (Tukey, Games-Howell, Dunn, Holm) y gráficos.
 6. **Informe APA 7** en Markdown y Word (DOCX), en español e inglés.
 
 > ⚠️ PsicoStat es una ayuda didáctica. Revisa siempre los resultados y la redacción con tu tutor/a o un/a estadístico/a.
@@ -120,6 +120,7 @@ Ver [`examples/`](examples/) para informes completos generados con los datos de 
 | Heterocedasticidad en regresión | Errores típicos HC3 |
 | Pruebas de rangos | N a priori ÷ 0.864 (eficiencia relativa asintótica) |
 | Regresión logística | 10 eventos por predictor (mín. 100) |
+| Regresión con VD ordinal (p. ej., un ítem Likert) | Regresión logística ordinal de odds proporcionales + prueba de Brant (1990); N a priori por Whitehead (1993). La suma de varios ítems se trata como cuantitativa |
 
 Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.json`.
 
@@ -130,16 +131,20 @@ Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.
 ## Referencias
 
 - American Psychological Association. (2020). *Publication manual of the American Psychological Association* (7th ed.).
+- Brant, R. (1990). Assessing proportionality in the proportional odds model for ordinal logistic regression. *Biometrics, 46*(4), 1171–1178.
 - Clopper, C. J., & Pearson, E. S. (1934). The use of confidence or fiducial limits illustrated in the case of the binomial. *Biometrika, 26*(4), 404–413.
 - Cohen, J. (1988). *Statistical power analysis for the behavioral sciences* (2nd ed.). Erlbaum.
 - DeLong, E. R., DeLong, D. M., & Clarke-Pearson, D. L. (1988). Comparing the areas under two or more correlated receiver operating characteristic curves: A nonparametric approach. *Biometrics, 44*(3), 837–845.
 - Delacre, M., Lakens, D., & Leys, C. (2017). Why psychologists should by default use Welch's t-test. *International Review of Social Psychology, 30*(1), 92–101.
 - Faul, F., Erdfelder, E., Lang, A.-G., & Buchner, A. (2007). G*Power 3. *Behavior Research Methods, 39*, 175–191.
 - Hosmer, D. W., Lemeshow, S., & Sturdivant, R. X. (2013). *Applied logistic regression* (3rd ed.). Wiley.
+- Hsieh, F. Y., Bloch, D. A., & Larsen, M. D. (1998). A simple method of sample size calculation for linear and logistic regression. *Statistics in Medicine, 17*(14), 1623–1634.
 - Lakens, D. (2022). Sample size justification. *Collabra: Psychology, 8*(1), 33267.
+- McCullagh, P. (1980). Regression models for ordinal data. *Journal of the Royal Statistical Society: Series B, 42*(2), 109–142.
 - Peduzzi, P., et al. (1996). A simulation study of the number of events per variable in logistic regression analysis. *Journal of Clinical Epidemiology, 49*(12), 1373–1379.
 - Serlin, R. C., Carr, J., & Marascuilo, L. A. (1982). A measure of association for selected nonparametric procedures. *Psychological Bulletin, 92*(3), 786–790.
 - Steiger, J. H. (2004). Beyond the F test: Effect size confidence intervals. *Psychological Methods, 9*(2), 164–182.
+- Whitehead, J. (1993). Sample size calculations for ordered categorical data. *Statistics in Medicine, 12*(24), 2257–2271.
 
 ---
 

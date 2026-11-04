@@ -24,6 +24,7 @@ T = {
     "spearman": ("correlación de Spearman", "Spearman correlation"),
     "linreg": ("regresión lineal múltiple (MCO)", "multiple linear regression (OLS)"),
     "logreg": ("regresión logística binaria", "binary logistic regression"),
+    "ordreg": ("regresión logística ordinal de odds proporcionales", "proportional-odds ordinal logistic regression"),
     # assumptions
     "a_normality": ("Normalidad (Shapiro-Wilk)", "Normality (Shapiro-Wilk)"),
     "a_homogeneity": ("Homogeneidad de varianzas (Levene, mediana)", "Homogeneity of variance (Levene, median)"),
@@ -33,6 +34,7 @@ T = {
     "a_multicollinearity": ("Multicolinealidad (VIF < 5)", "Multicollinearity (VIF < 5)"),
     "a_independence": ("Independencia de residuos (Durbin-Watson 1.5–2.5)", "Independence of residuals (Durbin-Watson 1.5–2.5)"),
     "a_slopes": ("Homogeneidad de pendientes de regresión", "Homogeneity of regression slopes"),
+    "a_proportional_odds": ("Odds proporcionales (prueba de Brant)", "Proportional odds (Brant test)"),
     "a_epv": ("Eventos por predictor ≥ 10", "Events per predictor ≥ 10"),
     "a_outliers": ("Valores atípicos (|z| > 3)", "Outliers (|z| > 3)"),
     "a_linearity": ("Linealidad (inspección del diagrama de dispersión)", "Linearity (inspect scatterplot)"),
@@ -73,6 +75,7 @@ T = {
     "q_levels": ("Niveles del factor A (separados por comas)", "Levels of factor A (comma separated)"),
     "q_levels_b": ("Niveles del factor B (separados por comas)", "Levels of factor B (comma separated)"),
     "q_dv_levels": ("Categorías de la VD (separadas por comas)", "DV categories (comma separated)"),
+    "q_dv_order": ("Categorías de la VD, de menor a mayor (separadas por comas)", "DV categories, from lowest to highest (comma separated)"),
     "q_predictors": ("Predictores (separados por comas)", "Predictors (comma separated)"),
     "q_covariates": ("Covariables (separadas por comas, opcional)", "Covariates (comma separated, optional)"),
     "q_effect_label": ("Tamaño del efecto esperado", "Expected effect size"),

@@ -21,13 +21,17 @@ def columns(d: Design):
     if rec.test in ("pearson", "spearman"):
         cols += [(d.iv_name, "Variable X", "Variable X", d.iv_type, ""),
                  (d.dv_name, "Variable Y", "Variable Y", d.dv_type, "")]
-    elif rec.test in ("linreg", "logreg"):
+    elif rec.test in ("linreg", "logreg", "ordreg"):
         for p in d.predictors:
             cols.append((p, "Predictor", "Predictor", d.iv_type,
                          "" if d.iv_type != "nominal" else "categorías / categories"))
-        allowed = "0, 1" if rec.test == "logreg" else ""
-        cols.append((d.dv_name, "Variable criterio (VD)" + (" — 1 = evento" if allowed else ""),
-                     "Outcome (DV)" + (" — 1 = event" if allowed else ""), d.dv_type, allowed))
+        if rec.test == "ordreg":
+            cols.append((d.dv_name, "Variable criterio ordinal (VD), categorías de menor a mayor",
+                         "Ordinal outcome (DV), categories from lowest to highest", d.dv_type, ", ".join(d.dv_levels)))
+        else:
+            allowed = "0, 1" if rec.test == "logreg" else ""
+            cols.append((d.dv_name, "Variable criterio (VD)" + (" — 1 = evento" if allowed else ""),
+                         "Outcome (DV)" + (" — 1 = event" if allowed else ""), d.dv_type, allowed))
     elif rec.test in ("chi2", "fisher"):
         cols += [(d.iv_name, "Variable categórica 1 (VI)", "Categorical variable 1 (IV)", "nominal", ", ".join(d.levels)),
                  (d.dv_name, "Variable categórica 2 (VD)", "Categorical variable 2 (DV)", "nominal", ", ".join(d.dv_levels))]
@@ -65,7 +69,7 @@ def make_template(d: Design, n: int = 20):
     df = pd.DataFrame({c: [""] * n for c in names})
     df["id"] = [f"P{i + 1:03d}" for i in range(n)]
     rec = recommend(d)
-    if d.design in ("between", "mixed") and rec.test not in ("chi2", "fisher", "pearson", "spearman", "linreg", "logreg"):
+    if d.design in ("between", "mixed") and rec.test not in ("chi2", "fisher", "pearson", "spearman", "linreg", "logreg", "ordreg"):
         if d.n_factors == 2 and d.design == "between":
             cells = [(a, b) for a in d.levels for b in d.levels_b]
             df[d.iv_name] = [cells[i % len(cells)][0] for i in range(n)]

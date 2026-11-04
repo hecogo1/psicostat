@@ -105,6 +105,14 @@ def example(name: str, seed: int = 42):
         al, age = rng.normal(0, 1, n), rng.normal(35, 10, n)
         p = 1 / (1 + np.exp(-(-1 - .9 * al + .02 * (age - 35))))
         df = pd.DataFrame({"id": _ids(n), "alianza": al.round(2), "edad": age.round(0), "abandono": (rng.random(n) < p).astype(int)})
+    elif name == "ordinal":
+        d = Design(title="Satisfacción con la terapia (ítem Likert)", analysis="regression", dv_type="ordinal", iv_type="continuous",
+                   predictors=["alianza", "sesiones"], dv_name="satisfaccion", dv_levels=["1", "2", "3", "4", "5"])
+        n = 150
+        al, ses = rng.normal(0, 1, n), rng.poisson(10, n)
+        lat = .9 * al + .05 * (ses - 10) + rng.logistic(0, 1, n)
+        df = pd.DataFrame({"id": _ids(n), "alianza": al.round(2), "sesiones": ses,
+                           "satisfaccion": np.searchsorted([-2, -.8, .6, 2], lat) + 1})
     elif name == "mcnemar":
         d = Design(title="Síntoma presente antes y después", analysis="compare", design="within", dv_type="nominal",
                    n_groups=2, levels=["antes", "despues"], dv_name="insomnio", iv_name="momento")
@@ -118,4 +126,4 @@ def example(name: str, seed: int = 42):
 
 
 EXAMPLES = ["ttest", "mannwhitney", "paired", "anova", "factorial", "ancova", "rm", "mixed", "chi2",
-            "correlation", "regression", "logistic", "mcnemar"]
+            "correlation", "regression", "logistic", "ordinal", "mcnemar"]
