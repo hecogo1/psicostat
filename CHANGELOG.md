@@ -4,6 +4,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 
 ## [Sin publicar] / Unreleased
 
+## [0.4.0] - 2026-11-04
+
 ### Añadido / Added
 - Regresión logística: capacidad discriminativa del modelo con el área bajo la curva ROC (AUC) y su IC 95% no paramétrico de DeLong et al. (1988), en la tabla «Ajuste del modelo» y en el texto de resultados con una etiqueta cualitativa (Hosmer et al., 2013); validado frente a R `pROC::ci.auc` (#22) / Logistic regression: model discrimination via ROC AUC with DeLong 95% CI, validated against R pROC.
 - Regresión logística ordinal de odds proporcionales para VD ordinales (p. ej., un ítem Likert), que antes se analizaban como regresión lineal: OR con IC 95%, umbrales con su EE, χ² de razón de verosimilitud, R² de McFadden y Nagelkerke, prueba de Brant (1990) global y por predictor del supuesto de odds proporcionales (con aviso y alternativas si no se cumple), gráfico de probabilidades predichas por categoría y N a priori por la fórmula de Whitehead (1993). El asistente, la CLI y la plantilla piden las categorías de la VD de menor a mayor; nuevo ejemplo `ordinal`. Validado frente a Stata `ologit` y `brant` con los datos de UCLA OARC (#5) / Proportional-odds ordinal logistic regression for ordinal DVs (ORs, thresholds, LR χ², pseudo-R², Brant test, predicted-probability plot, Whitehead sample size), validated against Stata ologit and brant.
