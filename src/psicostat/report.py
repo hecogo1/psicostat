@@ -290,7 +290,9 @@ def _tables(res, lang):
                                     ("cumple" if es else "met"): ("sí" if es else "yes") if a["ok"] else "no"} for a in res.assumptions])))
     for k, v in res.extra_tables.items():
         name = {"coefficients": ("Coeficientes", "Coefficients"), "model": ("Ajuste del modelo", "Model fit"),
-                "adjusted_means": ("Medias ajustadas", "Adjusted means")}.get(k, (k, k))[_L(lang)]
+                "adjusted_means": ("Medias ajustadas", "Adjusted means"),
+                "thresholds": ("Umbrales (puntos de corte)", "Thresholds (cut-points)"),
+                "brant": ("Prueba de Brant de odds proporcionales", "Brant test of proportional odds")}.get(k, (k, k))[_L(lang)]
         tabs.append((name, v))
     if res.posthoc is not None:
         tabs.append(((f"Post hoc: {res.posthoc_method}"), res.posthoc))

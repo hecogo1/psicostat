@@ -189,6 +189,8 @@ def current_design():
             kw["predictors"] = lst(g["predictors"])
             if g["dv_type"] == "nominal":
                 kw["event_rate"] = float(g["event_rate"])
+            elif g["dv_type"] == "ordinal":
+                kw["dv_levels"] = lst(g["dv_levels"])
     kw["n_groups"] = max(len(kw.get("levels", [])), 2)
     kw["effect_label"] = g["effect_label"]
     c = str(g["effect_custom"] or "").replace(",", ".").strip()
@@ -380,6 +382,14 @@ with main:
                     c1.text_input(t("q_predictors", lang), key="k_predictors")
                     if ss.k_dv_type == "nominal":
                         st.slider(t("q_event_rate", lang), 0.05, 0.95, step=0.05, key="k_event_rate")
+                    elif ss.k_dv_type == "ordinal":
+                        if [x.lower() for x in lst(ss.get("k_dv_levels", ""))] in ([], ["si", "no"], ["sí", "no"]):
+                            ss.k_dv_levels = "1, 2, 3, 4, 5"
+                        c2.text_input(t("q_dv_order", lang), key="k_dv_levels",
+                                      help=L("Las respuestas posibles de la VD en orden (p. ej., 1, 2, 3, 4, 5 o nada, poco, bastante, mucho). "
+                                             "Se analizará con una regresión logística ordinal.",
+                                             "The possible DV responses in order (e.g., 1, 2, 3, 4, 5 or none, a little, quite, a lot). "
+                                             "It will be analysed with ordinal logistic regression."))
         elif step == 2:
             head(2, L("Decide qué efecto quieres poder detectar y con qué seguridad.", "Decide which effect you want to be able to detect, and how reliably."))
             c1, c2 = st.columns(2)
@@ -530,7 +540,8 @@ CONCEPTS = [
     (L("Niveles de medida", "Measurement levels"),
      L("<p>El nivel de medida decide si usamos pruebas <b>paramétricas</b> (medias, como la t o el ANOVA) o <b>no paramétricas</b> (rangos, como Mann-Whitney).</p><ul><li><b>Nominal</b>: categorías (grupo, sexo).</li><li><b>Ordinal</b>: orden sin distancias iguales (un ítem Likert).</li><li><b>Intervalo/razón</b>: puntuaciones totales, tiempos.</li></ul>",
        "<p>The measurement level decides whether we use <b>parametric</b> tests (means, like t or ANOVA) or <b>nonparametric</b> ones (ranks, like Mann-Whitney).</p><ul><li><b>Nominal</b>: categories (group, sex).</li><li><b>Ordinal</b>: ordered, unequal distances (one Likert item).</li><li><b>Interval/ratio</b>: total scores, times.</li></ul>"),
-     L("La suma de varios ítems Likert suele tratarse como intervalo.", "A sum of several Likert items is usually treated as interval.")),
+     L("La suma de varios ítems Likert suele tratarse como intervalo. Si quieres predecir la respuesta a un solo ítem Likert, elige VD ordinal: se usará una regresión logística ordinal.",
+       "A sum of several Likert items is usually treated as interval. To predict the answer to a single Likert item, choose an ordinal DV: ordinal logistic regression will be used.")),
     (L("¿Qué es la potencia?", "What is power?"),
      L("<p>El <b>tamaño del efecto</b> es cuánto importa la diferencia, independientemente de N. Cohen propuso referencias: pequeño, mediano y grande.</p><p><b>α</b> es el riesgo de ver un efecto que no existe; la <b>potencia</b>, la probabilidad de detectar un efecto que sí existe.</p><p>Efectos pequeños necesitan muestras grandes.</p>",
        "<p>The <b>effect size</b> is how much the difference matters, regardless of N. Cohen proposed benchmarks: small, medium and large.</p><p><b>α</b> is the risk of seeing an effect that does not exist; <b>power</b> is the probability of detecting an effect that does.</p><p>Small effects need large samples.</p>"),

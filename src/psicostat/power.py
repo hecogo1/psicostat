@@ -147,6 +147,17 @@ def sample_size(d: Design, rec=None) -> dict:
         npg = None
         method = (f"regla de 10 eventos por predictor (Peduzzi et al., 1996) con proporción del evento = {d.event_rate} y mínimo de 100",
                   f"10 events-per-predictor rule (Peduzzi et al., 1996) with event proportion = {d.event_rate} and minimum of 100")
+    elif test == "ordreg":
+        k = max(len(d.dv_levels), 2)
+        if es <= 0 or es == 1:
+            raise ValueError("La OR esperada debe ser > 0 y distinta de 1 / the expected OR must be > 0 and different from 1")
+        za = stats.norm.ppf(1 - a / 2)
+        n_total = max(math.ceil(3 * (za + stats.norm.ppf(pw)) ** 2 / (math.log(es) ** 2 * (1 - 1 / k ** 2))), 10)
+        npg = None
+        method = (f"regresión ordinal de odds proporcionales, fórmula de Whitehead (1993) para un predictor estandarizado "
+                  f"(OR por DT) con {k} categorías equiprobables",
+                  f"proportional-odds ordinal regression, Whitehead (1993) formula for one standardized predictor "
+                  f"(OR per SD) with {k} equally likely categories")
     else:  # pragma: no cover
         raise ValueError(test)
 
@@ -158,6 +169,14 @@ def sample_size(d: Design, rec=None) -> dict:
             n_total = npg * groups
         notes.append(("Prueba de rangos: N inflado dividiendo por la eficiencia relativa asintótica mínima (0.864).",
                       "Rank-based test: N inflated by dividing by the minimum asymptotic relative efficiency (0.864)."))
+    if test == "ordreg":
+        notes.append(("La fórmula de Whitehead es una aproximación: supone categorías igual de frecuentes y, en muestras pequeñas, la potencia real "
+                      "puede quedar algo por debajo de la nominal. Si esperas categorías muy desequilibradas, aumenta N.",
+                      "Whitehead's formula is an approximation: it assumes equally frequent categories and, in small samples, actual power may fall "
+                      "slightly below nominal. If you expect very unbalanced categories, increase N."))
+    if test == "ordreg" and len(d.predictors) > 1:
+        notes.append(("Con varios predictores correlacionados, divide N por (1 − R²) del predictor de interés con los demás (Hsieh et al., 1998).",
+                      "With several correlated predictors, divide N by (1 − R²) of the predictor of interest on the others (Hsieh et al., 1998)."))
     n_before = n_total
     if d.dropout and d.dropout > 0:
         if npg:

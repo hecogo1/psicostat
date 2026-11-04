@@ -83,6 +83,8 @@ def wizard(lang="es"):
             kw["predictors"] = _list(_ask(t("q_predictors", lang), "x1,x2"))
             if kw["dv_type"] == "nominal":
                 kw["event_rate"] = _ask(t("q_event_rate", lang), 0.3, cast=float)
+            elif kw["dv_type"] == "ordinal":
+                kw["dv_levels"] = _list(_ask(t("q_dv_order", lang), "1,2,3,4,5"))
     kw["n_groups"] = max(len(kw.get("levels", [])), 2)
     print("\n" + t("step3", lang))
     print("  " + t("effect_help", lang))
