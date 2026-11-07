@@ -25,6 +25,7 @@ T = {
     "linreg": ("regresión lineal múltiple (MCO)", "multiple linear regression (OLS)"),
     "logreg": ("regresión logística binaria", "binary logistic regression"),
     "ordreg": ("regresión logística ordinal de odds proporcionales", "proportional-odds ordinal logistic regression"),
+    "mediation": ("mediación simple (efecto indirecto con IC bootstrap)", "simple mediation (indirect effect with bootstrap CI)"),
     # assumptions
     "a_normality": ("Normalidad (Shapiro-Wilk)", "Normality (Shapiro-Wilk)"),
     "a_homogeneity": ("Homogeneidad de varianzas (Levene, mediana)", "Homogeneity of variance (Levene, median)"),
@@ -57,6 +58,7 @@ T = {
     "an_correlation": ("Relación entre dos variables (correlación)", "Relationship between two variables (correlation)"),
     "an_regression": ("Predecir una variable (regresión)", "Predict an outcome (regression)"),
     "an_association": ("Asociación entre dos variables categóricas", "Association between two categorical variables"),
+    "an_mediation": ("Mediación simple (X → M → Y)", "Simple mediation (X → M → Y)"),
     "q_design": ("Tipo de diseño", "Design type"),
     "d_between": ("Entre sujetos (grupos independientes)", "Between-subjects (independent groups)"),
     "d_within": ("Intra sujetos / medidas repetidas (muestras relacionadas)", "Within-subjects / repeated measures (paired)"),
@@ -77,6 +79,8 @@ T = {
     "q_dv_levels": ("Categorías de la VD (separadas por comas)", "DV categories (comma separated)"),
     "q_dv_order": ("Categorías de la VD, de menor a mayor (separadas por comas)", "DV categories, from lowest to highest (comma separated)"),
     "q_predictors": ("Predictores (separados por comas)", "Predictors (comma separated)"),
+    "q_mediator": ("Nombre del mediador M (sin espacios)", "Mediator M name (no spaces)"),
+    "q_x_name": ("Nombre del predictor X (sin espacios)", "Predictor X name (no spaces)"),
     "q_covariates": ("Covariables (separadas por comas, opcional)", "Covariates (comma separated, optional)"),
     "q_effect_label": ("Tamaño del efecto esperado", "Expected effect size"),
     "q_effect_custom": ("Valor concreto (opcional; vacío = usar la etiqueta)", "Custom value (optional; empty = use label)"),
@@ -86,9 +90,9 @@ T = {
     "q_rho": ("Correlación esperada entre medidas repetidas", "Expected correlation among repeated measures"),
     "q_event_rate": ("Proporción esperada del evento (VD = 1)", "Expected event proportion (DV = 1)"),
     "effect_help": (
-        "Guía de Cohen (1988): d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35. "
+        "Guía de Cohen (1988): d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35; sendas de mediación a=b = .14/.39/.59 (Fritz y MacKinnon, 2007). "
         "Mejor aún: usa el efecto de un metaanálisis o estudio previo (y sé conservador: los efectos publicados suelen estar inflados).",
-        "Cohen (1988) benchmarks: d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35. "
+        "Cohen (1988) benchmarks: d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35; mediation paths a=b = .14/.39/.59 (Fritz and MacKinnon, 2007). "
         "Better: use the effect from a meta-analysis or prior study (and be conservative: published effects tend to be inflated)."),
     "recommended": ("Prueba recomendada", "Recommended test"),
     "fallback": ("Alternativa no paramétrica / si fallan supuestos", "Nonparametric / fallback alternative"),

@@ -4,6 +4,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 
 ## [Sin publicar] / Unreleased
 
+### Añadido / Added
+- Mediación simple (X → M → Y): sendas a, b, c y c′ por MCO, efecto indirecto a×b con IC 95% bootstrap percentil (5000 remuestreos), texto APA en es/en, N a priori orientativo de Fritz y MacKinnon (2007), plantilla CSV, ejemplo `mediation`, CLI y asistente web. Primera entrega del #1 (la moderación queda para un seguimiento) / Simple mediation (X → M → Y): OLS paths a, b, c, c′, percentile bootstrap 95% CI for a×b, APA text, Fritz & MacKinnon sample-size guidance, CSV template, `mediation` example, CLI and web wizard. First slice of #1 (moderation left for a follow-up).
+
 ## [0.4.0] - 2026-11-04
 
 ### Añadido / Added

@@ -12,8 +12,8 @@
 
 PsicoStat te guía paso a paso desde la pregunta de investigación hasta el texto de **Método** y **Resultados** en estilo **APA 7**, en español o inglés:
 
-1. **Asistente**: te pregunta el diseño (entre sujetos, intra sujetos, mixto, correlacional, regresión, asociación), número de grupos o condiciones, nivel de medida de las variables, covariables, tamaño del efecto esperado (con la guía de Cohen), α y potencia.
-2. **Prueba recomendada**: t de Welch, t pareada, Mann-Whitney, Wilcoxon, ANOVA de un factor / Welch / factorial / medidas repetidas / mixto, ANCOVA, Kruskal-Wallis, Friedman, chi-cuadrado / Fisher, McNemar, Q de Cochran, Pearson / Spearman, regresión lineal, logística y logística ordinal (odds proporcionales); con supuestos a comprobar y alternativa no paramétrica.
+1. **Asistente**: te pregunta el diseño (entre sujetos, intra sujetos, mixto, correlacional, regresión, asociación, mediación), número de grupos o condiciones, nivel de medida de las variables, covariables, tamaño del efecto esperado (con la guía de Cohen), α y potencia.
+2. **Prueba recomendada**: t de Welch, t pareada, Mann-Whitney, Wilcoxon, ANOVA de un factor / Welch / factorial / medidas repetidas / mixto, ANCOVA, Kruskal-Wallis, Friedman, chi-cuadrado / Fisher, McNemar, Q de Cochran, Pearson / Spearman, regresión lineal, logística y logística ordinal (odds proporcionales), mediación simple (efecto indirecto con IC bootstrap); con supuestos a comprobar y alternativa no paramétrica.
 3. **Tamaño muestral a priori**, explicado y validado frente a G*Power.
 4. **Plantilla CSV** con las columnas exactas de tu diseño + **diccionario de datos**.
 5. **Análisis** del CSV relleno: descriptivos, supuestos (Shapiro-Wilk, Levene, Mauchly, Breusch-Pagan, VIF, Brant…), la prueba (con cambio automático a la alternativa si fallan los supuestos), **tamaños del efecto con IC 95%**, post hoc (Tukey, Games-Howell, Dunn, Holm) y gráficos.
@@ -137,6 +137,8 @@ Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.
 - DeLong, E. R., DeLong, D. M., & Clarke-Pearson, D. L. (1988). Comparing the areas under two or more correlated receiver operating characteristic curves: A nonparametric approach. *Biometrics, 44*(3), 837–845.
 - Delacre, M., Lakens, D., & Leys, C. (2017). Why psychologists should by default use Welch's t-test. *International Review of Social Psychology, 30*(1), 92–101.
 - Faul, F., Erdfelder, E., Lang, A.-G., & Buchner, A. (2007). G*Power 3. *Behavior Research Methods, 39*, 175–191.
+- Fritz, M. S., & MacKinnon, D. P. (2007). Required sample size to detect the mediated effect. *Psychological Science, 18*(3), 233–239.
+- Hayes, A. F. (2022). *Introduction to mediation, moderation, and conditional process analysis* (3rd ed.). Guilford Press.
 - Hosmer, D. W., Lemeshow, S., & Sturdivant, R. X. (2013). *Applied logistic regression* (3rd ed.). Wiley.
 - Hsieh, F. Y., Bloch, D. A., & Larsen, M. D. (1998). A simple method of sample size calculation for linear and logistic regression. *Statistics in Medicine, 17*(14), 1623–1634.
 - Lakens, D. (2022). Sample size justification. *Collabra: Psychology, 8*(1), 33267.
@@ -153,7 +155,7 @@ Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.
 
 **PsicoStat** guides psychology students and researchers step by step from the research question to APA 7 **Method** and **Results** text, in Spanish or English.
 
-**Features**: guided wizard (design, groups/conditions, measurement levels, covariates, expected effect size with Cohen's benchmarks, α, power) → recommended test with assumptions and nonparametric fallback → a priori sample size (validated against G*Power) → CSV template + data dictionary → analysis (descriptives, assumption checks, test, effect sizes with 95% CIs, post hoc tests, plots) → APA 7 report in Markdown and DOCX.
+**Features**: guided wizard (design, groups/conditions, measurement levels, covariates, mediation, expected effect size with Cohen's benchmarks, α, power) → recommended test with assumptions and nonparametric fallback (including simple mediation with bootstrap CI for the indirect effect) → a priori sample size (validated against G*Power; Fritz & MacKinnon for mediation) → CSV template + data dictionary → analysis (descriptives, assumption checks, test, effect sizes with 95% CIs, post hoc tests, plots) → APA 7 report in Markdown and DOCX.
 
 ### About
 

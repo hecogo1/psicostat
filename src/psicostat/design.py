@@ -10,7 +10,7 @@ from .i18n import t
 ALTERNATIVES = ("two-sided", "greater", "less")
 # tests for which a one-sided (directional) alternative is valid
 DIRECTIONAL_TESTS = {"ttest_ind", "mannwhitney", "ttest_paired", "wilcoxon", "pearson", "spearman"}
-ANALYSES = ("compare", "correlation", "regression", "association")
+ANALYSES = ("compare", "correlation", "regression", "association", "mediation")
 DESIGNS = ("between", "within", "mixed")
 LEVELS = ("continuous", "ordinal", "nominal")
 
@@ -22,6 +22,7 @@ BENCHMARKS = {
     "w": {"small": 0.10, "medium": 0.30, "large": 0.50},
     "f2": {"small": 0.02, "medium": 0.15, "large": 0.35},
     "or": {"small": 1.5, "medium": 2.5, "large": 4.3},  # Chen, Cohen & Chen (2010)
+    "path": {"small": 0.14, "medium": 0.39, "large": 0.59},  # Cohen-style standardized paths (Fritz & MacKinnon, 2007)
 }
 
 
@@ -43,6 +44,7 @@ class Design:
     levels_b: list = field(default_factory=list)
     dv_levels: list = field(default_factory=list)   # categories of a nominal DV
     predictors: list = field(default_factory=list)
+    mediator: str = "mediador"       # simple mediation: X (iv_name) → M → Y (dv_name)
     covariates: list = field(default_factory=list)
     effect_label: str = "medium"
     effect_size: Optional[float] = None
@@ -160,6 +162,15 @@ def recommend(d: Design) -> Recommendation:
         return Recommendation("chi2", "fisher", "w", [indep, "a_expected"],
                               [("Si alguna frecuencia esperada es < 5 en una tabla 2×2 se usa la prueba exacta de Fisher.",
                                 "If any expected count is < 5 in a 2×2 table, Fisher's exact test is used.")])
+    if d.analysis == "mediation":
+        notes = [("Mediación simple (X → M → Y): sendas a, b, c y c′ por MCO; efecto indirecto a×b con IC 95% bootstrap percentil "
+                  "(5000 remuestreos). La VD y el mediador deben ser cuantitativos; la VI puede ser cuantitativa o dicotómica.",
+                  "Simple mediation (X → M → Y): paths a, b, c and c′ by OLS; indirect effect a×b with percentile bootstrap 95% CI "
+                  "(5000 resamples). The DV and mediator must be continuous; the IV may be continuous or dichotomous.")]
+        if d.dv_type != "continuous":
+            notes.append(("La VD debe ser cuantitativa para esta mediación lineal; con VD ordinal o dicotómica usa otros modelos (p. ej., PROCESS).",
+                          "The DV must be continuous for this linear mediation; with an ordinal or dichotomous DV use other models (e.g., PROCESS)."))
+        return Recommendation("mediation", None, "path", [indep, "a_linearity", N, "a_homoscedasticity"], notes)
     if d.analysis == "correlation":
         if "ordinal" in (d.dv_type, d.iv_type):
             return Recommendation("spearman", None, "r", [indep, "a_linearity"],

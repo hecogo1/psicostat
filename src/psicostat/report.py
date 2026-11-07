@@ -76,6 +76,14 @@ def stat_str(row, lang="es", decimal_comma=False):
 
 def _sig(row, alpha, lang):
     if row["p"] is None:
+        ci = row.get("ci")
+        if ci is not None and len(ci) == 2 and all(x is not None and np.isfinite(x) for x in ci):
+            excludes = ci[0] > 0 or ci[1] < 0
+            if lang == "es":
+                return ("fue estadísticamente significativo (el IC no incluye el 0)" if excludes else
+                        "no fue estadísticamente significativo (el IC incluye el 0)")
+            return ("was statistically significant (CI excludes 0)" if excludes else
+                    "was not statistically significant (CI includes 0)")
         return ""
     if lang == "es":
         return "fue estadísticamente significativo" if row["p"] < alpha else "no fue estadísticamente significativo"
@@ -87,6 +95,16 @@ def _subject(r, lang):
     es = lang == "es"
     if lab == "Modelo/Model":
         return "El modelo global" if es else "The overall model"
+    if lab.startswith("a × b") or "indirecto" in lab or lab.endswith("(indirect)"):
+        return "El efecto indirecto" if es else "The indirect effect"
+    if lab.startswith("a ("):
+        return "La senda a" if es else "Path a"
+    if lab.startswith("b ("):
+        return "La senda b" if es else "Path b"
+    if lab.startswith("c ("):
+        return "El efecto total" if es else "The total effect"
+    if lab.startswith("c′") or lab.startswith("c'"):
+        return "El efecto directo" if es else "The direct effect"
     if " vs " in lab:
         a, b = lab.split(" vs ", 1)
         return f"La diferencia entre {a} y {b}" if es else f"The difference between {a} and {b}"
@@ -163,6 +181,9 @@ def methods_text(design, lang="es"):
         elif d.analysis == "regression":
             P.append(("Diseño", f"Se empleó un diseño correlacional-predictivo con {d.dv_name} como variable criterio y "
                                 f"{', '.join(d.predictors)} como predictor(es)."))
+        elif d.analysis == "mediation":
+            P.append(("Diseño", f"Se examinó un modelo de mediación simple con {d.iv_name} como predictor (X), "
+                                f"{d.mediator} como mediador (M) y {d.dv_name} como variable dependiente (Y)."))
         else:
             P.append(("Diseño", f"Se examinó la asociación entre las variables categóricas {d.iv_name} y {d.dv_name}."))
         ana = (f"El análisis principal planificado fue: {t(rec.test, lang)}. "
@@ -194,6 +215,9 @@ def methods_text(design, lang="es"):
         elif d.analysis == "regression":
             P.append(("Design", f"A correlational-predictive design was used with {d.dv_name} as outcome and "
                                 f"{', '.join(d.predictors)} as predictor(s)."))
+        elif d.analysis == "mediation":
+            P.append(("Design", f"A simple mediation model was examined with {d.iv_name} as predictor (X), "
+                                f"{d.mediator} as mediator (M) and {d.dv_name} as dependent variable (Y)."))
         else:
             P.append(("Design", f"The association between the categorical variables {d.iv_name} and {d.dv_name} was examined."))
         ana = (f"The planned main analysis was: {t(rec.test, lang)}. Assumptions were checked beforehand: "
@@ -292,7 +316,9 @@ def _tables(res, lang):
         name = {"coefficients": ("Coeficientes", "Coefficients"), "model": ("Ajuste del modelo", "Model fit"),
                 "adjusted_means": ("Medias ajustadas", "Adjusted means"),
                 "thresholds": ("Umbrales (puntos de corte)", "Thresholds (cut-points)"),
-                "brant": ("Prueba de Brant de odds proporcionales", "Brant test of proportional odds")}.get(k, (k, k))[_L(lang)]
+                "brant": ("Prueba de Brant de odds proporcionales", "Brant test of proportional odds"),
+                "paths": ("Sendas de mediación", "Mediation paths"),
+                "indirect": ("Efecto indirecto (bootstrap)", "Indirect effect (bootstrap)")}.get(k, (k, k))[_L(lang)]
         tabs.append((name, v))
     if res.posthoc is not None:
         tabs.append(((f"Post hoc: {res.posthoc_method}"), res.posthoc))

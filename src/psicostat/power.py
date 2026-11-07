@@ -158,6 +158,20 @@ def sample_size(d: Design, rec=None) -> dict:
                   f"(OR por DT) con {k} categorías equiprobables",
                   f"proportional-odds ordinal regression, Whitehead (1993) formula for one standardized predictor "
                   f"(OR per SD) with {k} equally likely categories")
+    elif test == "mediation":
+        # Fritz & MacKinnon (2007), Table 3, percentile bootstrap, α=.05, power=.80, equal paths a = b
+        # (empirical empirical N for detecting a×b; not an analytical power formula).
+        table = ((0.14, 462), (0.26, 148), (0.39, 78), (0.59, 36))
+        n_total = table[0][1]
+        for thr, n in table:
+            if abs(es) >= thr - 1e-12:
+                n_total = n
+        # scale roughly if power/alpha differ from .80/.05 (conservative: only support the published cell)
+        npg = None
+        method = (f"mediación simple, N orientativo de Fritz y MacKinnon (2007, tabla 3, bootstrap percentil) "
+                  f"para sendas estandarizadas a = b = {es:.2f} (α = .05, potencia = .80)",
+                  f"simple mediation, approximate N from Fritz and MacKinnon (2007, Table 3, percentile bootstrap) "
+                  f"for standardized paths a = b = {es:.2f} (α = .05, power = .80)")
     else:  # pragma: no cover
         raise ValueError(test)
 
@@ -177,6 +191,11 @@ def sample_size(d: Design, rec=None) -> dict:
     if test == "ordreg" and len(d.predictors) > 1:
         notes.append(("Con varios predictores correlacionados, divide N por (1 − R²) del predictor de interés con los demás (Hsieh et al., 1998).",
                       "With several correlated predictors, divide N by (1 − R²) of the predictor of interest on the others (Hsieh et al., 1998)."))
+    if test == "mediation":
+        notes.append(("Valores tomados de la diagonal a = b de Fritz y MacKinnon (2007); si esperas sendas desiguales o potencia ≠ .80, "
+                      "consulta la tabla original o un análisis de potencia por simulación.",
+                      "Values taken from the a = b diagonal of Fritz and MacKinnon (2007); if you expect unequal paths or power ≠ .80, "
+                      "see the original table or a simulation-based power analysis."))
     n_before = n_total
     if d.dropout and d.dropout > 0:
         if npg:
@@ -196,7 +215,7 @@ def _b(x):
 
 
 def explain(ss: dict, lang="es") -> str:
-    sym = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR"}[ss["family"]]
+    sym = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR", "path": "a=b"}[ss["family"]]
     i = 0 if lang == "es" else 1
     if lang == "es":
         txt = (f"Análisis de potencia a priori ({ss['method'][i]}): para detectar un efecto {sym} = {ss['effect']:.2f} "

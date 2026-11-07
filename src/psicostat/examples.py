@@ -113,6 +113,14 @@ def example(name: str, seed: int = 42):
         lat = .9 * al + .05 * (ses - 10) + rng.logistic(0, 1, n)
         df = pd.DataFrame({"id": _ids(n), "alianza": al.round(2), "sesiones": ses,
                            "satisfaccion": np.searchsorted([-2, -.8, .6, 2], lat) + 1})
+    elif name == "mediation":
+        d = Design(title="Estrés, rumiación y depresión", question="¿La rumiación media la relación entre estrés y depresión?",
+                   analysis="mediation", iv_type="continuous", iv_name="estres", mediator="rumiacion", dv_name="depresion")
+        n = 120
+        x = rng.normal(0, 1, n)
+        m = 0.5 * x + rng.normal(0, 1, n)
+        y = 0.4 * m + 0.2 * x + rng.normal(0, 1, n)
+        df = pd.DataFrame({"id": _ids(n), "estres": x.round(2), "rumiacion": m.round(2), "depresion": y.round(2)})
     elif name == "mcnemar":
         d = Design(title="Síntoma presente antes y después", analysis="compare", design="within", dv_type="nominal",
                    n_groups=2, levels=["antes", "despues"], dv_name="insomnio", iv_name="momento")
@@ -126,4 +134,4 @@ def example(name: str, seed: int = 42):
 
 
 EXAMPLES = ["ttest", "mannwhitney", "paired", "anova", "factorial", "ancova", "rm", "mixed", "chi2",
-            "correlation", "regression", "logistic", "ordinal", "mcnemar"]
+            "correlation", "regression", "logistic", "ordinal", "mediation", "mcnemar"]
