@@ -36,7 +36,16 @@ def test_larger_effect_needs_fewer():
     dict(design="mixed", n_groups=2, n_levels_b=3), dict(n_factors=2, n_groups=2, n_levels_b=3),
     dict(covariates=["pre"]), dict(analysis="regression", dv_type="nominal", predictors=["a", "b"]),
     dict(design="within", dv_type="nominal", n_groups=2),
+    dict(analysis="mediation", iv_type="continuous", mediator="m"),
 ])
 def test_all_designs_have_n(kw):
     ss = sample_size(Design(**kw))
     assert ss["n_total"] > 0
+
+
+def test_mediation_fritz_mackinnon():
+    # Fritz & MacKinnon (2007) Table 3, percentile bootstrap, a = b, power .80
+    assert sample_size(Design(analysis="mediation", effect_label="small"))["n_total"] == 462
+    assert sample_size(Design(analysis="mediation", effect_label="medium"))["n_total"] == 78
+    assert sample_size(Design(analysis="mediation", effect_label="large"))["n_total"] == 36
+    assert sample_size(Design(analysis="mediation", effect_size=0.39))["n_total"] == 78

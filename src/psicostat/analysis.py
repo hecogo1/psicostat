@@ -350,6 +350,8 @@ def analyze(d: Design, data, outdir=None) -> Result:
         numeric_cols = [d.dv_name] if rec.test == "linreg" else []
     if rec.test == "ordreg":
         numeric_cols = [] if d.iv_type == "nominal" else [c for c in numeric_cols if c != d.dv_name]
+    if rec.test == "mediation":
+        numeric_cols = [d.mediator, d.dv_name] + ([] if d.iv_type == "nominal" else [d.iv_name])
     for c in numeric_cols:
         df[c] = _num(df, c)
     df = df.replace("", np.nan).dropna(subset=[c for c in need if c != "id"])
@@ -363,7 +365,7 @@ def analyze(d: Design, data, outdir=None) -> Result:
         "anova_factorial": _factorial, "ancova": _ancova,
         "anova_rm": _rm, "friedman": _rm, "anova_mixed": _mixed,
         "chi2": _chi2, "fisher": _chi2, "mcnemar": _mcnemar, "cochran": _cochran,
-        "pearson": _corr, "spearman": _corr, "linreg": _linreg, "logreg": _logreg, "ordreg": _ordreg,
+        "pearson": _corr, "spearman": _corr, "linreg": _linreg, "logreg": _logreg, "ordreg": _ordreg, "mediation": _mediation,
     }[rec.test]
     fn(d, df, res, outdir)
     return res
@@ -1106,3 +1108,138 @@ def _ordreg(d, df, res, outdir):
                       "and the same OR applies to every cut-point of the DV."))
     if d.iv_type != "nominal":
         res.figures.append(_plot_ordinal(X.iloc[:, 0].to_numpy(float), X, beta, thr, 0, used, X.columns[0], outdir))
+
+# ------------------------------------------------------------------ simple mediation (X → M → Y)
+N_BOOT_MED = 5000
+
+
+def _mediation_x(d, df):
+    """Return the numeric X vector (continuous or 0/1 for a dichotomous nominal IV)."""
+    if d.iv_type != "nominal":
+        return df[d.iv_name].to_numpy(float), d.iv_name
+    levels = [str(x) for x in (d.levels or sorted(df[d.iv_name].astype(str).unique()))]
+    present = sorted(set(df[d.iv_name].astype(str)))
+    if len(present) != 2:
+        raise DataError("Para mediación con VI nominal se necesitan exactamente 2 categorías (dicotómica) / "
+                        "mediation with a nominal IV needs exactly 2 categories (dichotomous)")
+    if len(levels) >= 2 and set(levels[:2]) == set(present):
+        one = levels[1]
+    else:
+        one = present[1]
+    x = (df[d.iv_name].astype(str) == one).to_numpy(float)
+    return x, f"{d.iv_name}({one})"
+
+
+def _ols_path(y, *predictors):
+    X = sm.add_constant(np.column_stack([np.asarray(p, float) for p in predictors]))
+    return sm.OLS(np.asarray(y, float), X).fit()
+
+
+def bootstrap_indirect(x, m, y, n_boot=N_BOOT_MED, seed=0):
+    """Percentile bootstrap CI for the OLS indirect effect a×b (X→M→Y).
+
+    Returns (ab_point, lo, hi, ab_samples). Matches PROCESS model 4 / lavaan observed-variable mediation
+    with percentile (not bias-corrected) bootstrap.
+    """
+    x, m, y = map(lambda v: np.asarray(v, float), (x, m, y))
+    n = len(x)
+    a = _ols_path(m, x).params[1]
+    b = _ols_path(y, x, m).params[2]
+    ab0 = float(a * b)
+    rng = np.random.default_rng(seed)
+    samples = np.empty(n_boot)
+    for i in range(n_boot):
+        idx = rng.integers(0, n, n)
+        ai = _ols_path(m[idx], x[idx]).params[1]
+        bi = _ols_path(y[idx], x[idx], m[idx]).params[2]
+        samples[i] = ai * bi
+    lo, hi = np.quantile(samples, [0.025, 0.975])
+    return ab0, float(lo), float(hi), samples
+
+
+def _mediation(d, df, res, outdir):
+    x, x_lab = _mediation_x(d, df)
+    m = df[d.mediator].to_numpy(float)
+    y = df[d.dv_name].to_numpy(float)
+    if d.dv_type != "continuous":
+        raise DataError("La mediación lineal requiere VD cuantitativa / linear mediation requires a continuous DV")
+    if np.ptp(x) == 0 or np.ptp(m) == 0 or np.ptp(y) == 0:
+        raise DataError("X, M o Y no varían / X, M or Y has no variance")
+    res.descriptives = _desc({x_lab: x, d.mediator: m, d.dv_name: y})
+    # assumptions on residuals of the outcome model Y ~ X + M
+    fit_ymx = _ols_path(y, x, m)
+    w, p = _shapiro(fit_ymx.resid)
+    bp = het_breuschpagan(fit_ymx.resid, sm.add_constant(np.column_stack([x, m])))
+    res.assumptions += [
+        {"key": "a_linearity", "detail": "inspección / visual (X, M, Y)", "p": None, "ok": True},
+        {"key": "a_normality", "detail": f"residuos Y~X+M: W = {E.fmt_num(w, True, 3)}, {E.fmt_p(p)}", "p": p, "ok": not p < .05},
+        {"key": "a_homoscedasticity", "detail": f"LM = {bp[0]:.2f}, {E.fmt_p(bp[1])}", "p": bp[1], "ok": not bp[1] < .05},
+    ]
+    fa = _ols_path(m, x)
+    fc = _ols_path(y, x)
+    fymx = fit_ymx
+    a, a_se, a_t, a_p = map(float, (fa.params[1], fa.bse[1], fa.tvalues[1], fa.pvalues[1]))
+    c, c_se, c_t, c_p = map(float, (fc.params[1], fc.bse[1], fc.tvalues[1], fc.pvalues[1]))
+    cp, cp_se, cp_t, cp_p = map(float, (fymx.params[1], fymx.bse[1], fymx.tvalues[1], fymx.pvalues[1]))
+    b, b_se, b_t, b_p = map(float, (fymx.params[2], fymx.bse[2], fymx.tvalues[2], fymx.pvalues[2]))
+    ab, lo, hi, _ = bootstrap_indirect(x, m, y, n_boot=N_BOOT_MED, seed=0)
+    # standardized paths (for reporting magnitude of a×b on an r-like metric when X continuous)
+    sx, sm_, sy = np.std(x, ddof=1), np.std(m, ddof=1), np.std(y, ddof=1)
+    a_std = a * sx / sm_ if sm_ else np.nan
+    b_std = b * sm_ / sy if sy else np.nan
+    ab_std = a_std * b_std if np.isfinite(a_std) and np.isfinite(b_std) else np.nan
+    df_a, df_c, df_b = int(fa.df_resid), int(fc.df_resid), int(fymx.df_resid)
+    res.rows += [
+        _row(f"a ({x_lab} → {d.mediator})", "t", f"{df_a}", a_t, a_p, "a", a, (a - 1.96 * a_se, a + 1.96 * a_se)),
+        _row(f"b ({d.mediator} → {d.dv_name} | {x_lab})", "t", f"{df_b}", b_t, b_p, "b", b, (b - 1.96 * b_se, b + 1.96 * b_se)),
+        _row(f"c (total {x_lab} → {d.dv_name})", "t", f"{df_c}", c_t, c_p, "c", c, (c - 1.96 * c_se, c + 1.96 * c_se)),
+        _row(f"c′ (directo/direct {x_lab} → {d.dv_name} | {d.mediator})", "t", f"{df_b}", cp_t, cp_p, "c′", cp,
+             (cp - 1.96 * cp_se, cp + 1.96 * cp_se)),
+        _row("a × b (indirecto/indirect)", "a×b", None, ab, None, "a×b", ab, (lo, hi)),
+    ]
+    res.extra_tables["paths"] = pd.DataFrame([
+        {"senda/path": "a", "desde/from": x_lab, "hacia/to": d.mediator, "coef": a, "EE/SE": a_se, "t": a_t, "p": a_p, "β": a_std},
+        {"senda/path": "b", "desde/from": d.mediator, "hacia/to": d.dv_name, "coef": b, "EE/SE": b_se, "t": b_t, "p": b_p, "β": b_std},
+        {"senda/path": "c", "desde/from": x_lab, "hacia/to": d.dv_name, "coef": c, "EE/SE": c_se, "t": c_t, "p": c_p, "β": c * sx / sy if sy else np.nan},
+        {"senda/path": "c′", "desde/from": x_lab, "hacia/to": d.dv_name, "coef": cp, "EE/SE": cp_se, "t": cp_t, "p": cp_p, "β": cp * sx / sy if sy else np.nan},
+        {"senda/path": "a×b", "desde/from": x_lab, "hacia/to": d.dv_name, "coef": ab, "EE/SE": np.nan, "t": np.nan, "p": np.nan, "β": ab_std},
+    ])
+    res.extra_tables["indirect"] = pd.DataFrame([{
+        "a×b": ab, "IC95_inf/CI95_low": lo, "IC95_sup/CI95_high": hi, "remuestreos/resamples": N_BOOT_MED,
+        "método/method": "bootstrap percentil / percentile bootstrap",
+    }])
+    excludes0 = (lo > 0) or (hi < 0)
+    a_s, b_s, ab_s, lo_s, hi_s = (E.fmt_num(v, False) for v in (a, b, ab, lo, hi))
+    if excludes0:
+        concl_es = (f"El IC 95% bootstrap percentil [{lo_s}, {hi_s}] no incluye el 0, lo que respalda un efecto indirecto "
+                    f"de {x_lab} sobre {d.dv_name} a través de {d.mediator}.")
+        concl_en = (f"The percentile bootstrap 95% CI [{lo_s}, {hi_s}] does not include 0, which supports an indirect effect "
+                    f"of {x_lab} on {d.dv_name} through {d.mediator}.")
+    else:
+        concl_es = (f"El IC 95% bootstrap percentil [{lo_s}, {hi_s}] incluye el 0, por lo que no se respalda un efecto "
+                    f"indirecto de {x_lab} sobre {d.dv_name} a través de {d.mediator}.")
+        concl_en = (f"The percentile bootstrap 95% CI [{lo_s}, {hi_s}] includes 0, so an indirect effect of {x_lab} on "
+                    f"{d.dv_name} through {d.mediator} is not supported.")
+    res.notes.append((
+        f"Mediación simple (modelo 4 de Hayes): a = {a_s} ({x_lab} → {d.mediator}), b = {b_s} ({d.mediator} → {d.dv_name} | {x_lab}), "
+        f"efecto indirecto a×b = {ab_s}. {concl_es} "
+        f"Las sendas se estiman por MCO; el IC del efecto indirecto usa {N_BOOT_MED} remuestreos bootstrap percentil (semilla 0).",
+        f"Simple mediation (Hayes model 4): a = {a_s} ({x_lab} → {d.mediator}), b = {b_s} ({d.mediator} → {d.dv_name} | {x_lab}), "
+        f"indirect effect a×b = {ab_s}. {concl_en} "
+        f"Paths are OLS estimates; the indirect-effect CI uses {N_BOOT_MED} percentile bootstrap resamples (seed 0).",
+    ))
+    # path-coefficient figure
+    fig, ax = plt.subplots(figsize=(6, 3.2))
+    labels = ["a", "b", "c′", "a×b"]
+    vals = [a, b, cp, ab]
+    colors = [PALETTE[0], PALETTE[1], PALETTE[2], ACCENT]
+    ax.barh(labels[::-1], vals[::-1], color=colors[::-1], height=0.6)
+    ax.axvline(0, color="#94A3B8", lw=1)
+    ax.set_xlabel("Coeficiente / coefficient")
+    ax.set_title(f"{x_lab} → {d.mediator} → {d.dv_name}")
+    ax.spines[["top", "right"]].set_visible(False)
+    # shade bootstrap CI for ab
+    y_ab = list(labels[::-1]).index("a×b")
+    ax.plot([lo, hi], [y_ab, y_ab], color="#1E293B", lw=2, solid_capstyle="round")
+    ax.plot([lo, hi], [y_ab, y_ab], "|", color="#1E293B", ms=10)
+    res.figures.append(_save(fig, outdir, "fig_mediacion.png"))

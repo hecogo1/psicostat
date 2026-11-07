@@ -48,7 +48,7 @@ def wizard(lang="es"):
     print(t("step1", lang))
     title = _ask(t("q_title", lang), "")
     question = _ask(t("q_question", lang), "")
-    analysis = _ask(t("q_analysis", lang), 1, [(a, t("an_" + a, lang)) for a in ("compare", "correlation", "regression", "association")])
+    analysis = _ask(t("q_analysis", lang), 1, [(a, t("an_" + a, lang)) for a in ("compare", "correlation", "regression", "association", "mediation")])
     kw = dict(title=title, question=question, analysis=analysis)
     print("\n" + t("step2", lang))
     if analysis == "compare":
@@ -73,6 +73,14 @@ def wizard(lang="es"):
         kw["levels"] = _list(_ask(t("q_levels", lang), "a,b"))
         kw["dv_name"] = _ask(t("q_dv_name", lang), "var2")
         kw["dv_levels"] = _list(_ask(t("q_dv_levels", lang), "si,no"))
+    elif analysis == "mediation":
+        kw["dv_type"] = "continuous"
+        kw["iv_type"] = _ask(t("q_iv_type", lang), 1, [(x, t("t_" + x, lang)) for x in ("continuous", "nominal")])
+        kw["iv_name"] = _ask(t("q_x_name", lang), "x")
+        if kw["iv_type"] == "nominal":
+            kw["levels"] = _list(_ask(t("q_levels", lang), "control,tratamiento"))
+        kw["mediator"] = _ask(t("q_mediator", lang), "mediador")
+        kw["dv_name"] = _ask(t("q_dv_name", lang), "y")
     else:
         kw["dv_type"] = _ask(t("q_dv_type", lang), 1, [(x, t("t_" + x, lang)) for x in ("continuous", "ordinal", "nominal")])
         kw["iv_type"] = _ask(t("q_iv_type", lang), 1, [(x, t("t_" + x, lang)) for x in ("continuous", "ordinal", "nominal")])
