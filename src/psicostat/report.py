@@ -105,6 +105,11 @@ def _subject(r, lang):
         return "El efecto total" if es else "The total effect"
     if lab.startswith("c′") or lab.startswith("c'"):
         return "El efecto directo" if es else "The direct effect"
+    if r["stat_symbol"] == "t" and " | " in lab:      # simple slope (moderation): "X | W = value"
+        x, cond = lab.split(" | ", 1)
+        return f"La pendiente simple de {x} cuando {cond}" if es else f"The simple slope of {x} when {cond}"
+    if r["stat_symbol"] == "t" and " × " in lab:      # X × W interaction term (moderation)
+        return f"La interacción {lab}" if es else f"The {lab} interaction"
     if " vs " in lab:
         a, b = lab.split(" vs ", 1)
         return f"La diferencia entre {a} y {b}" if es else f"The difference between {a} and {b}"
@@ -184,6 +189,9 @@ def methods_text(design, lang="es"):
         elif d.analysis == "mediation":
             P.append(("Diseño", f"Se examinó un modelo de mediación simple con {d.iv_name} como predictor (X), "
                                 f"{d.mediator} como mediador (M) y {d.dv_name} como variable dependiente (Y)."))
+        elif d.analysis == "moderation":
+            P.append(("Diseño", f"Se examinó un modelo de moderación con {d.iv_name} como predictor (X), {d.moderator} como "
+                                f"moderador (W) y {d.dv_name} como variable dependiente (Y), evaluando la interacción X × W."))
         else:
             P.append(("Diseño", f"Se examinó la asociación entre las variables categóricas {d.iv_name} y {d.dv_name}."))
         ana = (f"El análisis principal planificado fue: {t(rec.test, lang)}. "
@@ -218,6 +226,9 @@ def methods_text(design, lang="es"):
         elif d.analysis == "mediation":
             P.append(("Design", f"A simple mediation model was examined with {d.iv_name} as predictor (X), "
                                 f"{d.mediator} as mediator (M) and {d.dv_name} as dependent variable (Y)."))
+        elif d.analysis == "moderation":
+            P.append(("Design", f"A moderation model was examined with {d.iv_name} as predictor (X), {d.moderator} as "
+                                f"moderator (W) and {d.dv_name} as dependent variable (Y), testing the X × W interaction."))
         else:
             P.append(("Design", f"The association between the categorical variables {d.iv_name} and {d.dv_name} was examined."))
         ana = (f"The planned main analysis was: {t(rec.test, lang)}. Assumptions were checked beforehand: "
@@ -318,7 +329,9 @@ def _tables(res, lang):
                 "thresholds": ("Umbrales (puntos de corte)", "Thresholds (cut-points)"),
                 "brant": ("Prueba de Brant de odds proporcionales", "Brant test of proportional odds"),
                 "paths": ("Sendas de mediación", "Mediation paths"),
-                "indirect": ("Efecto indirecto (bootstrap)", "Indirect effect (bootstrap)")}.get(k, (k, k))[_L(lang)]
+                "indirect": ("Efecto indirecto (bootstrap)", "Indirect effect (bootstrap)"),
+                "r2_change": ("Cambio en R² por la interacción X × W", "R² change due to the X × W interaction"),
+                "simple_slopes": ("Pendientes simples de X según W", "Simple slopes of X by W")}.get(k, (k, k))[_L(lang)]
         tabs.append((name, v))
     if res.posthoc is not None:
         tabs.append(((f"Post hoc: {res.posthoc_method}"), res.posthoc))

@@ -122,9 +122,9 @@ st.markdown(CSS, unsafe_allow_html=True)
 
 # --------------------------------------------------------------------------- state
 FIELDS = ["title", "question", "analysis", "design", "dv_type", "iv_type", "dv_name", "iv_name", "levels", "n_factors",
-          "factor_b_name", "levels_b", "dv_levels", "covariates", "predictors", "mediator", "rho", "event_rate",
+          "factor_b_name", "levels_b", "dv_levels", "covariates", "predictors", "mediator", "moderator", "moderator_type", "moderator_levels", "center", "rho", "event_rate",
           "effect_label", "effect_custom", "alpha", "power", "dropout", "decimal_comma", "alternative"]
-LISTS = {"levels", "levels_b", "dv_levels", "covariates", "predictors"}
+LISTS = {"levels", "levels_b", "dv_levels", "covariates", "predictors", "moderator_levels"}
 
 
 def _load_design(d: Design):
@@ -186,6 +186,14 @@ def current_design():
                   mediator=g["mediator"] or "mediador", dv_name=g["dv_name"])
         if kw["iv_type"] == "nominal":
             kw["levels"] = lst(g["levels"])
+    elif a == "moderation":
+        kw.update(dv_type="continuous", iv_type=g["iv_type"] if g["iv_type"] == "nominal" else "continuous", iv_name=g["iv_name"],
+                  moderator=g["moderator"] or "moderador", moderator_type=g["moderator_type"] or "continuous", dv_name=g["dv_name"],
+                  center=bool(g["center"]) if g["center"] is not None else True)
+        if kw["iv_type"] == "nominal":
+            kw["levels"] = lst(g["levels"])
+        if kw["moderator_type"] == "nominal":
+            kw["moderator_levels"] = lst(g["moderator_levels"])
     else:
         kw.update(dv_type=g["dv_type"], iv_type=g["iv_type"], dv_name=g["dv_name"])
         if a == "correlation":
@@ -329,14 +337,16 @@ with main:
             c1, c2 = st.columns(2)
             c1.text_input(t("q_title", lang), key="k_title", placeholder=L("p. ej., Mindfulness y estrés académico", "e.g., Mindfulness and academic stress"))
             c2.text_input(t("q_question", lang), key="k_question", placeholder=L("¿Reduce X la variable Y?", "Does X reduce Y?"))
-            st.radio(t("q_analysis", lang), ["compare", "correlation", "regression", "association", "mediation"], key="k_analysis",
+            st.radio(t("q_analysis", lang), ["compare", "correlation", "regression", "association", "mediation", "moderation"], key="k_analysis",
                      format_func=lambda a: t("an_" + a, lang),
                      help=L("Comparar: diferencias entre grupos o momentos. Correlación: si dos variables varían juntas. "
                             "Regresión: predecir una variable a partir de otras. Asociación: relación entre dos variables de categorías. "
-                            "Mediación: si X influye en Y a través de un mediador M (efecto indirecto).",
+                            "Mediación: si X influye en Y a través de un mediador M (efecto indirecto). "
+                            "Moderación: si el efecto de X sobre Y cambia según una tercera variable W (interacción).",
                             "Compare: differences between groups or time points. Correlation: whether two variables vary together. "
                             "Regression: predict one variable from others. Association: relation between two categorical variables. "
-                            "Mediation: whether X affects Y through a mediator M (indirect effect)."))
+                            "Mediation: whether X affects Y through a mediator M (indirect effect). "
+                            "Moderation: whether the effect of X on Y changes with a third variable W (interaction)."))
             if ss.k_analysis == "compare":
                 st.radio(t("q_design", lang), ["between", "within", "mixed"], key="k_design", format_func=lambda x: t("d_" + x, lang),
                          help=L("Entre sujetos: cada persona está en un solo grupo. Intra sujetos: las mismas personas se miden varias veces. "
@@ -394,6 +404,30 @@ with main:
                               help=L("La variable resultado Y (cuantitativa).", "The outcome Y (continuous)."))
                 st.caption(L("Mediación simple lineal: VD y mediador cuantitativos; efecto indirecto a×b con IC bootstrap percentil.",
                              "Linear simple mediation: continuous DV and mediator; indirect effect a×b with percentile bootstrap CI."))
+            elif a == "moderation":
+                c1.selectbox(t("q_iv_type", lang), ["continuous", "nominal"], key="k_iv_type", format_func=lambda x: t("t_" + x, lang),
+                             help=L("X puede ser cuantitativa o dicotómica (dos categorías).", "X may be continuous or dichotomous (two categories)."))
+                c2.text_input(t("q_x_name", lang), key="k_iv_name", help=L("La variable cuyo efecto sobre Y estudias (X).", "The variable whose effect on Y you study (X)."))
+                if ss.k_iv_type == "nominal":
+                    c3.text_input(t("q_levels", lang), key="k_levels",
+                                  help=L("Exactamente dos categorías, en el orden 0 / 1.", "Exactly two categories, in the 0 / 1 order."))
+                c1.selectbox(t("q_moderator_type", lang), ["continuous", "nominal"], key="k_moderator_type", format_func=lambda x: t("t_" + x, lang),
+                             help=L("W puede ser cuantitativa (p. ej., apoyo social) o dicotómica (p. ej., sexo).",
+                                    "W may be continuous (e.g., social support) or dichotomous (e.g., sex)."))
+                c2.text_input(t("q_moderator", lang), key="k_moderator",
+                              help=L("La variable que puede cambiar la fuerza o la dirección del efecto de X (W).",
+                                     "The variable that may change the strength or direction of the effect of X (W)."))
+                if ss.k_moderator_type == "nominal":
+                    c3.text_input(t("q_moderator_levels", lang), key="k_moderator_levels",
+                                  help=L("Exactamente dos categorías, en el orden 0 / 1.", "Exactly two categories, in the 0 / 1 order."))
+                c1.text_input(t("q_dv_name", lang), key="k_dv_name", help=L("La variable resultado Y (cuantitativa).", "The outcome Y (continuous)."))
+                st.toggle(t("q_center", lang), key="k_center",
+                          help=L("Restar la media a X y W cuantitativas antes de multiplicarlas. No cambia la interacción, pero hace que los efectos de X y W "
+                                 "se interpreten en el valor medio de la otra variable (Hayes, 2022).",
+                                 "Subtract the mean from continuous X and W before multiplying them. It does not change the interaction, but X and W "
+                                 "effects are then read at the mean of the other variable (Hayes, 2022)."))
+                st.caption(L("Moderación (modelo 1 de Hayes): Y ~ X + W + X × W, ΔR² de la interacción, pendientes simples (media ± 1 DT de W) y gráfico.",
+                             "Moderation (Hayes model 1): Y ~ X + W + X × W, ΔR² for the interaction, simple slopes (mean ± 1 SD of W) and plot."))
             else:
                 c1.selectbox(t("q_dv_type", lang), TYPES, key="k_dv_type", format_func=lambda x: t("t_" + x, lang), help=tip_type)
                 c2.selectbox(t("q_iv_type", lang), TYPES, key="k_iv_type", format_func=lambda x: t("t_" + x, lang), help=tip_type)
@@ -442,7 +476,7 @@ with main:
                 st.error(design_error)
             else:
                 rec, ssz = recommend(design), sample_size(design)
-                fam = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR"}[ssz["family"]]
+                fam = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR", "path": "a = b"}.get(ssz["family"], ssz["family"])
                 cards([
                     (L("Prueba recomendada", "Recommended test"), cap(rec.label(lang).split(" (")[0]), L("Alternativa: ", "Fallback: ") + rec.fallback_label(lang), ""),
                     (L("Tamaño muestral", "Sample size"), f"N = {ssz['n_total']}",

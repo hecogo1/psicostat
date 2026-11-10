@@ -121,6 +121,15 @@ def example(name: str, seed: int = 42):
         m = 0.5 * x + rng.normal(0, 1, n)
         y = 0.4 * m + 0.2 * x + rng.normal(0, 1, n)
         df = pd.DataFrame({"id": _ids(n), "estres": x.round(2), "rumiacion": m.round(2), "depresion": y.round(2)})
+    elif name == "moderation":
+        d = Design(title="Estrés, apoyo social y ansiedad", question="¿Amortigua el apoyo social el efecto del estrés sobre la ansiedad?",
+                   analysis="moderation", iv_type="continuous", iv_name="estres", moderator="apoyo", dv_name="ansiedad",
+                   effect_label="small")
+        n = 150
+        x = rng.normal(20, 5, n)
+        w = rng.normal(30, 6, n)
+        y = 10 + 0.6 * (x - 20) - 0.15 * (w - 30) - 0.03 * (x - 20) * (w - 30) + rng.normal(0, 3, n)
+        df = pd.DataFrame({"id": _ids(n), "estres": x.round(1), "apoyo": w.round(1), "ansiedad": y.round(1)})
     elif name == "mcnemar":
         d = Design(title="Síntoma presente antes y después", analysis="compare", design="within", dv_type="nominal",
                    n_groups=2, levels=["antes", "despues"], dv_name="insomnio", iv_name="momento")
@@ -134,4 +143,4 @@ def example(name: str, seed: int = 42):
 
 
 EXAMPLES = ["ttest", "mannwhitney", "paired", "anova", "factorial", "ancova", "rm", "mixed", "chi2",
-            "correlation", "regression", "logistic", "ordinal", "mediation", "mcnemar"]
+            "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "mcnemar"]

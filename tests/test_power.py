@@ -37,6 +37,7 @@ def test_larger_effect_needs_fewer():
     dict(covariates=["pre"]), dict(analysis="regression", dv_type="nominal", predictors=["a", "b"]),
     dict(design="within", dv_type="nominal", n_groups=2),
     dict(analysis="mediation", iv_type="continuous", mediator="m"),
+    dict(analysis="moderation", iv_type="continuous", moderator="w"),
 ])
 def test_all_designs_have_n(kw):
     ss = sample_size(Design(**kw))
