@@ -10,7 +10,7 @@ from .i18n import t
 ALTERNATIVES = ("two-sided", "greater", "less")
 # tests for which a one-sided (directional) alternative is valid
 DIRECTIONAL_TESTS = {"ttest_ind", "mannwhitney", "ttest_paired", "wilcoxon", "pearson", "spearman"}
-ANALYSES = ("compare", "correlation", "regression", "association", "mediation")
+ANALYSES = ("compare", "correlation", "regression", "association", "mediation", "moderation")
 DESIGNS = ("between", "within", "mixed")
 LEVELS = ("continuous", "ordinal", "nominal")
 
@@ -30,7 +30,7 @@ BENCHMARKS = {
 class Design:
     title: str = ""
     question: str = ""
-    analysis: str = "compare"          # compare / correlation / regression / association
+    analysis: str = "compare"          # compare / correlation / regression / association / mediation / moderation
     design: str = "between"            # between / within / mixed
     n_factors: int = 1                 # 1 or 2 (factorial)
     n_groups: int = 2                  # levels of factor A (groups or conditions)
@@ -45,6 +45,10 @@ class Design:
     dv_levels: list = field(default_factory=list)   # categories of a nominal DV
     predictors: list = field(default_factory=list)
     mediator: str = "mediador"       # simple mediation: X (iv_name) → M → Y (dv_name)
+    moderator: str = "moderador"     # moderation: effect of X (iv_name) on Y (dv_name) depends on W
+    moderator_type: str = "continuous"   # continuous / nominal (dichotomous W)
+    moderator_levels: list = field(default_factory=list)   # 2 categories of a dichotomous W (0 / 1 order)
+    center: bool = True              # moderation: mean-centre continuous X and W before forming X × W
     covariates: list = field(default_factory=list)
     effect_label: str = "medium"
     effect_size: Optional[float] = None
@@ -62,8 +66,9 @@ class Design:
             raise ValueError(f"analysis must be one of {ANALYSES}")
         if self.design not in DESIGNS:
             raise ValueError(f"design must be one of {DESIGNS}")
-        if self.dv_type not in LEVELS or self.iv_type not in LEVELS:
+        if self.dv_type not in LEVELS or self.iv_type not in LEVELS or self.moderator_type not in LEVELS:
             raise ValueError(f"variable types must be one of {LEVELS}")
+        self.moderator_levels = [str(x).strip() for x in self.moderator_levels]
         if not 0 < self.alpha < 1 or not 0 < self.power < 1:
             raise ValueError("alpha and power must be in (0, 1)")
         if self.design == "mixed":
@@ -171,6 +176,21 @@ def recommend(d: Design) -> Recommendation:
             notes.append(("La VD debe ser cuantitativa para esta mediación lineal; con VD ordinal o dicotómica usa otros modelos (p. ej., PROCESS).",
                           "The DV must be continuous for this linear mediation; with an ordinal or dichotomous DV use other models (e.g., PROCESS)."))
         return Recommendation("mediation", None, "path", [indep, "a_linearity", N, "a_homoscedasticity"], notes)
+    if d.analysis == "moderation":
+        notes = [("Moderación (modelo 1 de Hayes): regresión MCO de Y sobre X, W y X × W"
+                  + (" con los predictores cuantitativos centrados en la media" if d.center else "")
+                  + "; ΔR² de la interacción (prueba F), pendientes simples de X en la media de W y ±1 DT (o en cada categoría "
+                  "de un W dicotómico) y gráfico de la interacción. La VD debe ser cuantitativa; X y W pueden ser cuantitativas o dicotómicas.",
+                  "Moderation (Hayes model 1): OLS regression of Y on X, W and X × W"
+                  + (" with continuous predictors mean-centred" if d.center else "")
+                  + "; ΔR² for the interaction (F test), simple slopes of X at the mean of W and ±1 SD (or at each category "
+                  "of a dichotomous W) and an interaction plot. The DV must be continuous; X and W may be continuous or dichotomous."),
+                 ("Los efectos de interacción suelen ser pequeños (Aguinis et al., 2005): planifica N con un f² pequeño salvo que tengas un estudio previo.",
+                  "Interaction effects are usually small (Aguinis et al., 2005): plan N with a small f² unless you have prior evidence.")]
+        if d.dv_type != "continuous":
+            notes.append(("La VD debe ser cuantitativa para esta moderación lineal; con VD dicotómica u ordinal usa una regresión logística con el término X × W.",
+                          "The DV must be continuous for this linear moderation; with a dichotomous or ordinal DV use logistic regression with the X × W term."))
+        return Recommendation("moderation", None, "f2", [indep, "a_linearity", N, "a_homoscedasticity", "a_multicollinearity"], notes)
     if d.analysis == "correlation":
         if "ordinal" in (d.dv_type, d.iv_type):
             return Recommendation("spearman", None, "r", [indep, "a_linearity"],

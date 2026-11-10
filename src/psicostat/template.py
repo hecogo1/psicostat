@@ -28,6 +28,16 @@ def columns(d: Design):
             cols.append((d.iv_name, "Predictor (X)", "Predictor (X)", "continuous", ""))
         cols += [(d.mediator, "Mediador (M)", "Mediator (M)", "continuous", ""),
                  (d.dv_name, "Variable dependiente (Y)", "Dependent variable (Y)", "continuous", "")]
+    elif rec.test == "moderation":
+        if d.iv_type == "nominal":
+            cols.append((d.iv_name, "Predictor (X), dicotómico", "Predictor (X), dichotomous", "nominal", ", ".join(d.levels)))
+        else:
+            cols.append((d.iv_name, "Predictor (X)", "Predictor (X)", "continuous", ""))
+        if d.moderator_type == "nominal":
+            cols.append((d.moderator, "Moderador (W), dicotómico", "Moderator (W), dichotomous", "nominal", ", ".join(d.moderator_levels)))
+        else:
+            cols.append((d.moderator, "Moderador (W)", "Moderator (W)", "continuous", ""))
+        cols.append((d.dv_name, "Variable dependiente (Y)", "Dependent variable (Y)", "continuous", ""))
     elif rec.test in ("linreg", "logreg", "ordreg"):
         for p in d.predictors:
             cols.append((p, "Predictor", "Predictor", d.iv_type,
@@ -76,15 +86,17 @@ def make_template(d: Design, n: int = 20):
     df = pd.DataFrame({c: [""] * n for c in names})
     df["id"] = [f"P{i + 1:03d}" for i in range(n)]
     rec = recommend(d)
-    if d.design in ("between", "mixed") and rec.test not in ("chi2", "fisher", "pearson", "spearman", "linreg", "logreg", "ordreg", "mediation"):
+    if d.design in ("between", "mixed") and rec.test not in ("chi2", "fisher", "pearson", "spearman", "linreg", "logreg", "ordreg", "mediation", "moderation"):
         if d.n_factors == 2 and d.design == "between":
             cells = [(a, b) for a in d.levels for b in d.levels_b]
             df[d.iv_name] = [cells[i % len(cells)][0] for i in range(n)]
             df[d.factor_b_name] = [cells[i % len(cells)][1] for i in range(n)]
         else:
             df[d.iv_name] = [d.levels[i % len(d.levels)] for i in range(n)]
-    if rec.test == "mediation" and d.iv_type == "nominal" and d.levels:
+    if rec.test in ("mediation", "moderation") and d.iv_type == "nominal" and d.levels:
         df[d.iv_name] = [d.levels[i % len(d.levels)] for i in range(n)]
+    if rec.test == "moderation" and d.moderator_type == "nominal" and d.moderator_levels:
+        df[d.moderator] = [d.moderator_levels[(i // max(len(d.levels), 1)) % len(d.moderator_levels)] for i in range(n)]
     dic = pd.DataFrame([{
         "columna/column": c[0], "descripcion": c[1], "description": c[2],
         "tipo": TYPE_LABEL[c[3]][0], "type": TYPE_LABEL[c[3]][1], "valores/values": c[4],

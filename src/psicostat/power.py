@@ -172,6 +172,13 @@ def sample_size(d: Design, rec=None) -> dict:
                   f"para sendas estandarizadas a = b = {es:.2f} (α = .05, potencia = .80)",
                   f"simple mediation, approximate N from Fritz and MacKinnon (2007, Table 3, percentile bootstrap) "
                   f"for standardized paths a = b = {es:.2f} (α = .05, power = .80)")
+    elif test == "moderation":
+        # F test of the R² increase due to X × W (1 df) in a model with 3 predictors (X, W, X × W); λ = f² · N
+        # (G*Power: linear multiple regression, fixed model, R² increase).
+        n_total = _min_n(lambda n: _f_power(es * n, 1, n - 4, a), pw, 6)
+        npg = None
+        method = ("moderación, prueba F del incremento de R² por la interacción X × W (1 gl, 3 predictores; efecto f²)",
+                  "moderation, F test of the R² increase due to the X × W interaction (1 df, 3 predictors; effect f²)")
     else:  # pragma: no cover
         raise ValueError(test)
 
@@ -196,6 +203,11 @@ def sample_size(d: Design, rec=None) -> dict:
                       "consulta la tabla original o un análisis de potencia por simulación.",
                       "Values taken from the a = b diagonal of Fritz and MacKinnon (2007); if you expect unequal paths or power ≠ .80, "
                       "see the original table or a simulation-based power analysis."))
+    if test == "moderation":
+        notes.append(("f² de la interacción = ΔR² / (1 − R² del modelo completo). En psicología las interacciones suelen ser pequeñas "
+                      "(f² ≈ .01–.02; Aguinis et al., 2005), así que «mediano» puede subestimar mucho el N necesario.",
+                      "Interaction f² = ΔR² / (1 − full-model R²). In psychology interactions are usually small "
+                      "(f² ≈ .01–.02; Aguinis et al., 2005), so “medium” can badly underestimate the N needed."))
     n_before = n_total
     if d.dropout and d.dropout > 0:
         if npg:

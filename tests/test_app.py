@@ -79,3 +79,27 @@ def test_ordinal_regression_in_ui():
     assert not at.exception
     html = " ".join(m.value for m in at.markdown)
     assert "ordinal" in html and "OR = " in html
+
+
+@pytest.mark.parametrize("name", ["mediation", "moderation"])
+def test_plan_step_for_mediation_and_moderation(name):
+    # regression: step 4 ("Prueba y tamaño muestral") crashed with KeyError for the mediation effect family
+    at = _app()
+    at.selectbox(key="k_example").set_value(name).run()
+    at.button(key="nav_3").click().run()
+    assert not at.exception
+    assert any("N = " in m.value for m in at.markdown)
+
+
+def test_moderation_in_ui():
+    at = _app()
+    at.selectbox(key="k_example").set_value("moderation").run()
+    at.button(key="nav_1").click().run()
+    assert not at.exception
+    assert at.text_input(key="k_moderator").value == "apoyo"
+    assert at.toggle(key="k_center").value is True
+    at.button(key="nav_5").click().run()
+    at.button(key="run").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "estres × apoyo" in html and "f²" in html and "pendiente simple" in html

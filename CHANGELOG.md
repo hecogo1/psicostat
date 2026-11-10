@@ -6,6 +6,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 
 ### Añadido / Added
 - Mediación simple (X → M → Y): sendas a, b, c y c′ por MCO, efecto indirecto a×b con IC 95% bootstrap percentil (5000 remuestreos), texto APA en es/en, N a priori orientativo de Fritz y MacKinnon (2007), plantilla CSV, ejemplo `mediation`, CLI y asistente web. Primera entrega del #1 (la moderación queda para un seguimiento) / Simple mediation (X → M → Y): OLS paths a, b, c, c′, percentile bootstrap 95% CI for a×b, APA text, Fritz & MacKinnon sample-size guidance, CSV template, `mediation` example, CLI and web wizard. First slice of #1 (moderation left for a follow-up).
+- Moderación (modelo 1 de Hayes): regresión MCO de Y sobre X, W y X × W con centrado opcional en la media de los predictores cuantitativos (activado por defecto); tabla de coeficientes con EE, t, p e IC 95%; ΔR² de la interacción con su prueba F y f²; pendientes simples de X en la media de W y ±1 DT (o en cada categoría de un W dicotómico) con EE, t, p e IC 95%; gráfico de la interacción; errores típicos HC3 si hay heterocedasticidad; interpretación en lenguaje sencillo y texto APA en es/en; N a priori por la prueba F del incremento de R² (validado con G*Power); X y W pueden ser cuantitativas o dicotómicas. Plantilla CSV, ejemplo `moderation`, CLI y asistente web. Validado frente a statsmodels (`ols("y ~ x * w")`, `anova_lm` y pendientes simples por re-centrado del moderador) (#27) / Moderation (Hayes model 1): OLS with X, W and X × W (optional mean-centring), coefficient table, ΔR² F test and f², simple slopes at mean ± 1 SD of W (or each level of a dichotomous W), interaction plot, HC3 when heteroscedastic, APA text, G*Power-validated sample size, template, `moderation` example, CLI and web wizard; validated against statsmodels.
+
+### Corregido / Fixed
+- Interfaz web: el paso «Prueba y tamaño muestral» fallaba (KeyError) con un diseño de mediación / Web UI: the "Test & sample size" step crashed (KeyError) for mediation designs.
 
 ## [0.4.0] - 2026-11-04
 

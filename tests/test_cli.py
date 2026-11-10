@@ -24,3 +24,13 @@ def test_wizard_with_defaults(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "N = 128" in out
     assert os.path.exists(tmp_path / "w" / "plantilla.csv")
+
+
+def test_wizard_moderation_dichotomous_w(tmp_path, monkeypatch, capsys):
+    # analysis 6 = moderation; X continuous; W dichotomous (h, m); effect medium (f² = .15)
+    answers = iter(["T", "Q", "6", "1", "estres", "2", "sexo", "h,m", "ansiedad", "2", "", "", "", ""])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    assert main(["wizard", "--out", str(tmp_path / "w")]) == 0
+    out = capsys.readouterr().out
+    assert "moderación" in out and "N = 55" in out
+    assert open(tmp_path / "w" / "plantilla.csv").readline().strip() == "id,estres,sexo,ansiedad"

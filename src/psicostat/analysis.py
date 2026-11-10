@@ -352,6 +352,9 @@ def analyze(d: Design, data, outdir=None) -> Result:
         numeric_cols = [] if d.iv_type == "nominal" else [c for c in numeric_cols if c != d.dv_name]
     if rec.test == "mediation":
         numeric_cols = [d.mediator, d.dv_name] + ([] if d.iv_type == "nominal" else [d.iv_name])
+    if rec.test == "moderation":
+        numeric_cols = ([d.dv_name] + ([] if d.iv_type == "nominal" else [d.iv_name])
+                        + ([] if d.moderator_type == "nominal" else [d.moderator]))
     for c in numeric_cols:
         df[c] = _num(df, c)
     df = df.replace("", np.nan).dropna(subset=[c for c in need if c != "id"])
@@ -366,6 +369,7 @@ def analyze(d: Design, data, outdir=None) -> Result:
         "anova_rm": _rm, "friedman": _rm, "anova_mixed": _mixed,
         "chi2": _chi2, "fisher": _chi2, "mcnemar": _mcnemar, "cochran": _cochran,
         "pearson": _corr, "spearman": _corr, "linreg": _linreg, "logreg": _logreg, "ordreg": _ordreg, "mediation": _mediation,
+        "moderation": _moderation,
     }[rec.test]
     fn(d, df, res, outdir)
     return res
@@ -1113,21 +1117,27 @@ def _ordreg(d, df, res, outdir):
 N_BOOT_MED = 5000
 
 
+def _dichotomous(df, col, levels, what="mediación", what_en="mediation"):
+    """0/1 coding of a dichotomous nominal column. Returns (vector, label, (level0, level1))."""
+    levels = [str(x) for x in (levels or sorted(df[col].astype(str).unique()))]
+    present = sorted(set(df[col].astype(str)))
+    if len(present) != 2:
+        raise DataError(f"Para {what} con una variable nominal ({col}) se necesitan exactamente 2 categorías (dicotómica) / "
+                        f"{what_en} with a nominal variable ({col}) needs exactly 2 categories (dichotomous)")
+    if len(levels) >= 2 and set(levels[:2]) == set(present):
+        zero, one = levels[0], levels[1]
+    else:
+        zero, one = present
+    x = (df[col].astype(str) == one).to_numpy(float)
+    return x, f"{col}({one})", (zero, one)
+
+
 def _mediation_x(d, df):
     """Return the numeric X vector (continuous or 0/1 for a dichotomous nominal IV)."""
     if d.iv_type != "nominal":
         return df[d.iv_name].to_numpy(float), d.iv_name
-    levels = [str(x) for x in (d.levels or sorted(df[d.iv_name].astype(str).unique()))]
-    present = sorted(set(df[d.iv_name].astype(str)))
-    if len(present) != 2:
-        raise DataError("Para mediación con VI nominal se necesitan exactamente 2 categorías (dicotómica) / "
-                        "mediation with a nominal IV needs exactly 2 categories (dichotomous)")
-    if len(levels) >= 2 and set(levels[:2]) == set(present):
-        one = levels[1]
-    else:
-        one = present[1]
-    x = (df[d.iv_name].astype(str) == one).to_numpy(float)
-    return x, f"{d.iv_name}({one})"
+    x, lab, _ = _dichotomous(df, d.iv_name, d.levels)
+    return x, lab
 
 
 def _ols_path(y, *predictors):
@@ -1243,3 +1253,172 @@ def _mediation(d, df, res, outdir):
     ax.plot([lo, hi], [y_ab, y_ab], color="#1E293B", lw=2, solid_capstyle="round")
     ax.plot([lo, hi], [y_ab, y_ab], "|", color="#1E293B", ms=10)
     res.figures.append(_save(fig, outdir, "fig_mediacion.png"))
+
+# ------------------------------------------------------------------ moderation (X × W → Y, Hayes model 1)
+def simple_slopes(fit, w_values, ix=1, iw=2, ixw=3):
+    """Conditional effect of X at given (model-metric) values of W: θ = b1 + b3·w.
+
+    SE = sqrt(V11 + 2w·V13 + w²·V33) from the coefficient covariance matrix of `fit` (OLS or HC3);
+    t with the model's residual df (Aiken & West, 1991; Hayes, 2022). Returns a list of dicts.
+    """
+    b = np.asarray(fit.params, float)
+    V = np.asarray(fit.cov_params(), float)
+    df_r = float(fit.df_resid)
+    tcrit = stats.t.ppf(.975, df_r)
+    out = []
+    for w in w_values:
+        theta = b[ix] + b[ixw] * w
+        se = float(np.sqrt(V[ix, ix] + 2 * w * V[ix, ixw] + w ** 2 * V[ixw, ixw]))
+        tv = theta / se
+        p = 2 * stats.t.sf(abs(tv), df_r)
+        out.append({"w": float(w), "theta": float(theta), "se": se, "t": float(tv), "p": float(p),
+                    "ci": (float(theta - tcrit * se), float(theta + tcrit * se))})
+    return out
+
+
+def _moderation_var(d, df, col, vtype, levels):
+    """Numeric vector, label, dichotomous level names (or None) and mean used for centring."""
+    if vtype == "nominal":
+        v, lab, lv = _dichotomous(df, col, levels, "moderación", "moderation")
+        return v, lab, lv, 0.0
+    v = df[col].to_numpy(float)
+    return v, col, None, (float(v.mean()) if d.center else 0.0)
+
+
+def _moderation(d, df, res, outdir):
+    if d.dv_type != "continuous":
+        raise DataError("La moderación lineal requiere VD cuantitativa / linear moderation requires a continuous DV")
+    x, x_lab, x_lv, mx = _moderation_var(d, df, d.iv_name, d.iv_type, d.levels)
+    w, w_lab, w_lv, mw = _moderation_var(d, df, d.moderator, d.moderator_type, d.moderator_levels)
+    y = df[d.dv_name].to_numpy(float)
+    if np.ptp(x) == 0 or np.ptp(w) == 0 or np.ptp(y) == 0:
+        raise DataError("X, W o Y no varían / X, W or Y has no variance")
+    n = len(y)
+    if n < 8:
+        raise DataError("Muy pocos casos para estimar la interacción (< 8) / too few cases to estimate the interaction (< 8)")
+    xc, wc = x - mx, w - mw
+    xw = xc * wc
+    int_lab = f"{x_lab} × {w_lab}"
+    res.descriptives = _desc({x_lab: x, w_lab: w, d.dv_name: y})
+    X_full = pd.DataFrame({"const": 1.0, x_lab: xc, w_lab: wc, int_lab: xw})
+    full = sm.OLS(y, X_full).fit()
+    reduced = sm.OLS(y, X_full.iloc[:, :3]).fit()
+    bp = het_breuschpagan(full.resid, X_full)
+    sw, sp = _shapiro(full.resid)
+    vifs = [variance_inflation_factor(X_full.values, i) for i in range(1, 4)]
+    res.assumptions += [
+        {"key": "a_linearity", "detail": "inspección / visual (gráfico de la interacción / interaction plot)", "p": None, "ok": True},
+        {"key": "a_normality", "detail": f"residuos/residuals: W = {E.fmt_num(sw, True, 3)}, {E.fmt_p(sp)}", "p": sp, "ok": not sp < .05},
+        {"key": "a_homoscedasticity", "detail": f"LM = {bp[0]:.2f}, {E.fmt_p(bp[1])}", "p": bp[1], "ok": not bp[1] < .05},
+        {"key": "a_multicollinearity", "detail": "VIF máx./max = " + f"{max(vifs):.2f}", "p": None, "ok": max(vifs) < 5},
+    ]
+    robust = bp[1] < .05
+    fit = full.get_robustcov_results("HC3") if robust else full
+    if robust:
+        res.notes.append(("Heterocedasticidad detectada: errores típicos robustos HC3 para los coeficientes y las pendientes simples "
+                          "(el ΔR² y su prueba F usan MCO).",
+                          "Heteroscedasticity detected: HC3 robust standard errors for the coefficients and simple slopes "
+                          "(ΔR² and its F test use OLS)."))
+    df2 = int(full.df_resid)
+    params, bse, tv, pv = map(np.asarray, (fit.params, fit.bse, fit.tvalues, fit.pvalues))
+    ci = np.asarray(fit.conf_int())
+    # R² change for the interaction (nested-model F test, 1 df)
+    dr2 = float(full.rsquared - reduced.rsquared)
+    f_ch = dr2 / ((1 - full.rsquared) / df2)
+    p_ch = float(stats.f.sf(f_ch, 1, df2))
+    f2 = dr2 / (1 - full.rsquared)
+    # main rows: interaction first (shown in the summary card), then the conditional first-order effects
+    res.rows.append(_row(int_lab, "t", f"{df2}", tv[3], pv[3], "f²", f2, None))
+    names = list(X_full.columns)
+    coef = []
+    for i, name in enumerate(names):
+        coef.append({"término/term": "(constante/intercept)" if i == 0 else name, "b": params[i], "EE/SE": bse[i], "t": tv[i],
+                     "p": pv[i], "IC95_inf/CI95_low": ci[i, 0], "IC95_sup/CI95_high": ci[i, 1]})
+    res.extra_tables["coefficients"] = pd.DataFrame(coef)
+    res.extra_tables["r2_change"] = pd.DataFrame([{
+        "R² (X, W)": reduced.rsquared, "R² (X, W, X × W)": full.rsquared, "ΔR²": dr2, "F": f_ch, "gl1/df1": 1, "gl2/df2": df2,
+        "p": p_ch, "f²": f2}])
+    res.extra_tables["model"] = pd.DataFrame([{"R²": full.rsquared, "R²_ajust/adj": full.rsquared_adj, "F": full.fvalue,
+                                               "gl1/df1": int(full.df_model), "gl2/df2": df2, "p": full.f_pvalue}])
+    # simple slopes of X at the mean of W and ±1 SD (continuous W) or at each category (dichotomous W)
+    if w_lv is None:
+        sdw, m0 = float(np.std(w, ddof=1)), float(w.mean())
+        probes = [(m0 + k * sdw - mw, m0 + k * sdw, tag) for k, tag in ((-1, "M − 1 DT/SD"), (0, "M"), (1, "M + 1 DT/SD"))]
+    else:
+        probes = [(0.0, 0.0, w_lv[0]), (1.0, 1.0, w_lv[1])]
+    slopes = simple_slopes(fit, [p[0] for p in probes])
+    ss_rows = []
+    for (wm, wraw, tag), s_ in zip(probes, slopes):
+        wtxt = tag if w_lv is not None else f"{E.fmt_num(wraw)} ({tag})"
+        res.rows.append(_row(f"{x_lab} | {d.moderator} = {wtxt}", "t", f"{df2}", s_["t"], s_["p"], "B", s_["theta"], s_["ci"]))
+        ss_rows.append({f"{d.moderator} (W)": wtxt, "efecto de X / effect of X": s_["theta"], "EE/SE": s_["se"], "t": s_["t"],
+                        "p": s_["p"], "IC95_inf/CI95_low": s_["ci"][0], "IC95_sup/CI95_high": s_["ci"][1]})
+    res.extra_tables["simple_slopes"] = pd.DataFrame(ss_rows)
+    # plain-language interpretation
+    b3 = float(params[3])
+    sig_int = pv[3] < d.alpha
+    fmt = E.fmt_num
+    cen_es = "; predictores cuantitativos centrados en la media" if d.center and (x_lv is None or w_lv is None) else ""
+    cen_en = "; continuous predictors mean-centred" if d.center and (x_lv is None or w_lv is None) else ""
+    def _slope_txt(lang):
+        parts = []
+        for (wm, wraw, tag), s_ in zip(probes, slopes):
+            wtxt = tag if w_lv is not None else f"{fmt(wraw)} ({tag.replace('DT/SD', 'DT' if lang == 'es' else 'SD')})"
+            parts.append(f"{d.moderator} = {wtxt}: B = {fmt(s_['theta'])}, {E.fmt_p(s_['p'])}")
+        return "; ".join(parts)
+    lo_s, hi_s = slopes[0], slopes[-1]
+    if sig_int:
+        if w_lv is None:
+            conc_es = (f"La variable {d.moderator} moderó la relación entre {x_lab} y {d.dv_name}: el efecto de {x_lab} "
+                       f"{'aumentó' if b3 > 0 else 'disminuyó'} a medida que aumentaba {d.moderator} "
+                       f"(B = {fmt(lo_s['theta'])} con {d.moderator} bajo, −1 DT, frente a B = {fmt(hi_s['theta'])} con {d.moderator} alto, +1 DT).")
+            conc_en = (f"The variable {d.moderator} moderated the relationship between {x_lab} and {d.dv_name}: the effect of {x_lab} "
+                       f"{'increased' if b3 > 0 else 'decreased'} as {d.moderator} increased "
+                       f"(B = {fmt(lo_s['theta'])} at low {d.moderator}, −1 SD, vs. B = {fmt(hi_s['theta'])} at high {d.moderator}, +1 SD).")
+        else:
+            conc_es = (f"La variable {d.moderator} moderó la relación entre {x_lab} y {d.dv_name}: el efecto de {x_lab} fue "
+                       f"B = {fmt(lo_s['theta'])} en «{w_lv[0]}» y B = {fmt(hi_s['theta'])} en «{w_lv[1]}».")
+            conc_en = (f"The variable {d.moderator} moderated the relationship between {x_lab} and {d.dv_name}: the effect of {x_lab} was "
+                       f"B = {fmt(lo_s['theta'])} in “{w_lv[0]}” and B = {fmt(hi_s['theta'])} in “{w_lv[1]}”.")
+    else:
+        conc_es = (f"La interacción no fue estadísticamente significativa, por lo que no se respalda que {d.moderator} modere la relación "
+                   f"entre {x_lab} y {d.dv_name}; las pendientes simples se muestran solo como descripción.")
+        conc_en = (f"The interaction was not statistically significant, so moderation of the {x_lab}–{d.dv_name} relationship by "
+                   f"{d.moderator} is not supported; simple slopes are shown for description only.")
+    res.notes.append((
+        f"Moderación (modelo 1 de Hayes{cen_es}): la interacción X × W (B = {fmt(b3)}) añadió ΔR² = {fmt(dr2, True, 3)} a la varianza "
+        f"explicada, F(1, {df2}) = {fmt(f_ch)}, {E.fmt_p(p_ch)}. {conc_es} Pendientes simples de {x_lab}: {_slope_txt('es')}.",
+        f"Moderation (Hayes model 1{cen_en}): the X × W interaction (B = {fmt(b3)}) added ΔR² = {fmt(dr2, True, 3)} to the explained "
+        f"variance, F(1, {df2}) = {fmt(f_ch)}, {E.fmt_p(p_ch)}. {conc_en} Simple slopes of {x_lab}: {_slope_txt('en')}.",
+    ))
+    if x_lv is None and w_lv is None and not d.center:
+        res.notes.append(("Sin centrar, los coeficientes de X y W son efectos condicionales cuando la otra variable vale 0, "
+                          "lo que puede no tener sentido en tu escala.",
+                          "Without centring, the X and W coefficients are conditional effects when the other variable is 0, "
+                          "which may be meaningless on your scale."))
+    res.figures.append(_plot_moderation(x, y, mx, mw, params, probes, w_lv, x_lv, x_lab, d.moderator, d.dv_name, outdir))
+
+
+def _plot_moderation(x, y, mx, mw, params, probes, w_lv, x_lv, x_lab, w_name, y_lab, outdir, name="fig_moderacion.png"):
+    """Predicted Y across X at each probed value of W (lines), over the raw data."""
+    b0, b1, b2, b3 = (float(v) for v in params)
+    fig, ax = plt.subplots(figsize=(6.2, 4.2))
+    colors = [PALETTE[0], ACCENT, PALETTE[1]] if len(probes) == 3 else [PALETTE[0], PALETTE[1]]
+    if x_lv is None:
+        ax.scatter(x, y, s=14, alpha=.35, color="#64748B", edgecolor="none")
+        xs = np.linspace(np.min(x), np.max(x), 50)
+    else:
+        jit = np.random.default_rng(1).uniform(-.06, .06, len(x))
+        ax.scatter(x + jit, y, s=14, alpha=.35, color="#64748B", edgecolor="none")
+        xs = np.array([0.0, 1.0])
+        ax.set_xticks([0, 1], list(x_lv))
+    for (wm, wraw, tag), col in zip(probes, colors):
+        yhat = b0 + b1 * (xs - mx) + b2 * wm + b3 * (xs - mx) * wm
+        lab = tag if w_lv is not None else f"{E.fmt_num(wraw)} ({tag})"
+        ax.plot(xs, yhat, color=col, lw=2.4, marker="o" if x_lv is not None else None, label=f"{w_name} = {lab}")
+    ax.set_xlabel(x_lab)
+    ax.set_ylabel(y_lab)
+    ax.set_title(f"{x_lab} × {w_name} → {y_lab}")
+    ax.legend(frameon=False, fontsize=9)
+    ax.spines[["top", "right"]].set_visible(False)
+    return _save(fig, outdir, name)
