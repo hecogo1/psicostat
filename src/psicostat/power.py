@@ -179,6 +179,13 @@ def sample_size(d: Design, rec=None) -> dict:
         npg = None
         method = ("moderación, prueba F del incremento de R² por la interacción X × W (1 gl, 3 predictores; efecto f²)",
                   "moderation, F test of the R² increase due to the X × W interaction (1 df, 3 predictors; effect f²)")
+    elif test == "reliability":
+        n_total = bonett_alpha_n(len(d.items), d.alpha_null, es, a, pw)
+        npg = None
+        method = (f"fiabilidad, fórmula de Bonett (2002) para contrastar H₀: α = {_b(d.alpha_null)} frente a un α de Cronbach esperado "
+                  f"de {_b(es)} con {len(d.items)} ítems",
+                  f"reliability, Bonett (2002) formula to test H₀: α = {_b(d.alpha_null)} against an expected Cronbach's α "
+                  f"of {_b(es)} with {len(d.items)} items")
     else:  # pragma: no cover
         raise ValueError(test)
 
@@ -208,6 +215,11 @@ def sample_size(d: Design, rec=None) -> dict:
                       "(f² ≈ .01–.02; Aguinis et al., 2005), así que «mediano» puede subestimar mucho el N necesario.",
                       "Interaction f² = ΔR² / (1 − full-model R²). In psychology interactions are usually small "
                       "(f² ≈ .01–.02; Aguinis et al., 2005), so “medium” can badly underestimate the N needed."))
+    if test == "reliability":
+        notes.append(("La fórmula de Bonett es una aproximación al contraste F exacto de Feldt (difiere en 1 caso como mucho; supone ítems "
+                      "paralelos y normalidad). Para validar la estructura de un cuestionario nuevo con análisis factorial se suelen necesitar más participantes.",
+                      "Bonett's formula approximates Feldt's exact F test (off by at most 1 case; it assumes parallel items and normality). "
+                      "Validating the structure of a new questionnaire with factor analysis usually needs more participants."))
     n_before = n_total
     if d.dropout and d.dropout > 0:
         if npg:
@@ -226,10 +238,33 @@ def _b(x):
     return f"{x:.2f}".lstrip("0")
 
 
+def bonett_alpha_n(k, alpha0, alpha1, a=0.05, power=0.80, two_sided=True):
+    """N to reject H₀: α = alpha0 when Cronbach's α = alpha1 (Bonett, 2002, eq. 5).
+
+    n = [2k / (k − 1)] (z_{a/2} + z_β)² / ln(δ)² + 2, with δ = (1 − alpha0) / (1 − alpha1), rounded up.
+    """
+    if k < 2:
+        raise ValueError("Se necesitan al menos 2 ítems / at least 2 items are needed")
+    if not (0 <= alpha0 < 1 and 0 < alpha1 < 1) or alpha1 == alpha0:
+        raise ValueError("El α esperado debe estar entre 0 y 1 y ser distinto del α mínimo (H₀) / "
+                         "the expected α must be in (0, 1) and differ from the minimum α (H₀)")
+    za = stats.norm.ppf(1 - a / 2) if two_sided else stats.norm.ppf(1 - a)
+    zb = stats.norm.ppf(power)
+    delta = (1 - alpha0) / (1 - alpha1)
+    return math.ceil(2 * k / (k - 1) * (za + zb) ** 2 / math.log(delta) ** 2 + 2)
+
+
 def explain(ss: dict, lang="es") -> str:
-    sym = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR", "path": "a=b"}[ss["family"]]
+    sym = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR", "path": "a=b", "rel": "α"}[ss["family"]]
     i = 0 if lang == "es" else 1
-    if lang == "es":
+    if ss["family"] == "rel":
+        if lang == "es":
+            txt = (f"Tamaño muestral a priori ({ss['method'][i]}): con un nivel de significación de {_b(ss['alpha'])} y potencia = "
+                   f"{_b(ss['power'])} se necesitan N = {ss['n_total']} participantes")
+        else:
+            txt = (f"A priori sample size ({ss['method'][i]}): with a significance level of {_b(ss['alpha'])} and power = "
+                   f"{_b(ss['power'])}, N = {ss['n_total']} participants are required")
+    elif lang == "es":
         txt = (f"Análisis de potencia a priori ({ss['method'][i]}): para detectar un efecto {sym} = {ss['effect']:.2f} "
                f"con α = {_b(ss['alpha'])} y potencia = {_b(ss['power'])} se necesitan N = {ss['n_total']} participantes")
         if ss["n_per_group"] and ss["groups"] > 1:

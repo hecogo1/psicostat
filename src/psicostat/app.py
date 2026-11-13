@@ -9,12 +9,13 @@ import io
 import os
 import tempfile
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
 from psicostat import __version__
-from psicostat.analysis import DataError, analyze
-from psicostat.design import DIRECTIONAL_TESTS, Design, assumption_label, recommend
+from psicostat.analysis import DataError, analyze, reliability_label
+from psicostat.design import BENCHMARKS, DIRECTIONAL_TESTS, Design, assumption_label, recommend
 from psicostat.effects import fmt_num, fmt_p, magnitude
 from psicostat.examples import EXAMPLES, example
 from psicostat.i18n import t
@@ -122,9 +123,10 @@ st.markdown(CSS, unsafe_allow_html=True)
 
 # --------------------------------------------------------------------------- state
 FIELDS = ["title", "question", "analysis", "design", "dv_type", "iv_type", "dv_name", "iv_name", "levels", "n_factors",
-          "factor_b_name", "levels_b", "dv_levels", "covariates", "predictors", "mediator", "moderator", "moderator_type", "moderator_levels", "center", "rho", "event_rate",
+          "factor_b_name", "levels_b", "dv_levels", "covariates", "predictors", "mediator", "moderator", "moderator_type", "moderator_levels", "center",
+          "items", "reverse_items", "scale_min", "scale_max", "alpha_null", "rho", "event_rate",
           "effect_label", "effect_custom", "alpha", "power", "dropout", "decimal_comma", "alternative"]
-LISTS = {"levels", "levels_b", "dv_levels", "covariates", "predictors", "moderator_levels"}
+LISTS = {"levels", "levels_b", "dv_levels", "covariates", "predictors", "moderator_levels", "items", "reverse_items"}
 
 
 def _load_design(d: Design):
@@ -194,6 +196,9 @@ def current_design():
             kw["levels"] = lst(g["levels"])
         if kw["moderator_type"] == "nominal":
             kw["moderator_levels"] = lst(g["moderator_levels"])
+    elif a == "reliability":
+        kw.update(dv_name=g["dv_name"], items=lst(g["items"]), reverse_items=lst(g["reverse_items"]),
+                  scale_min=float(g["scale_min"]), scale_max=float(g["scale_max"]), alpha_null=float(g["alpha_null"]))
     else:
         kw.update(dv_type=g["dv_type"], iv_type=g["iv_type"], dv_name=g["dv_name"])
         if a == "correlation":
@@ -337,16 +342,18 @@ with main:
             c1, c2 = st.columns(2)
             c1.text_input(t("q_title", lang), key="k_title", placeholder=L("p. ej., Mindfulness y estrés académico", "e.g., Mindfulness and academic stress"))
             c2.text_input(t("q_question", lang), key="k_question", placeholder=L("¿Reduce X la variable Y?", "Does X reduce Y?"))
-            st.radio(t("q_analysis", lang), ["compare", "correlation", "regression", "association", "mediation", "moderation"], key="k_analysis",
+            st.radio(t("q_analysis", lang), ["compare", "correlation", "regression", "association", "mediation", "moderation", "reliability"], key="k_analysis",
                      format_func=lambda a: t("an_" + a, lang),
                      help=L("Comparar: diferencias entre grupos o momentos. Correlación: si dos variables varían juntas. "
                             "Regresión: predecir una variable a partir de otras. Asociación: relación entre dos variables de categorías. "
                             "Mediación: si X influye en Y a través de un mediador M (efecto indirecto). "
-                            "Moderación: si el efecto de X sobre Y cambia según una tercera variable W (interacción).",
+                            "Moderación: si el efecto de X sobre Y cambia según una tercera variable W (interacción). "
+                            "Fiabilidad: si los ítems de una escala o cuestionario miden de forma consistente (α de Cronbach y ω de McDonald).",
                             "Compare: differences between groups or time points. Correlation: whether two variables vary together. "
                             "Regression: predict one variable from others. Association: relation between two categorical variables. "
                             "Mediation: whether X affects Y through a mediator M (indirect effect). "
-                            "Moderation: whether the effect of X on Y changes with a third variable W (interaction)."))
+                            "Moderation: whether the effect of X on Y changes with a third variable W (interaction). "
+                            "Reliability: whether the items of a scale or questionnaire measure consistently (Cronbach's α and McDonald's ω)."))
             if ss.k_analysis == "compare":
                 st.radio(t("q_design", lang), ["between", "within", "mixed"], key="k_design", format_func=lambda x: t("d_" + x, lang),
                          help=L("Entre sujetos: cada persona está en un solo grupo. Intra sujetos: las mismas personas se miden varias veces. "
@@ -428,6 +435,23 @@ with main:
                                  "effects are then read at the mean of the other variable (Hayes, 2022)."))
                 st.caption(L("Moderación (modelo 1 de Hayes): Y ~ X + W + X × W, ΔR² de la interacción, pendientes simples (media ± 1 DT de W) y gráfico.",
                              "Moderation (Hayes model 1): Y ~ X + W + X × W, ΔR² for the interaction, simple slopes (mean ± 1 SD of W) and plot."))
+            elif a == "reliability":
+                if not lst(ss.get("k_items", "")):
+                    ss.k_items = "item1, item2, item3, item4, item5"
+                c1.text_input(t("q_scale_name", lang), key="k_dv_name", help=L("Cómo se llama la escala o subescala (p. ej., autoestima).",
+                                                                               "The name of the scale or subscale (e.g., selfesteem)."))
+                st.text_input(t("q_items", lang), key="k_items",
+                              help=L("Una columna por ítem en el CSV, con la respuesta numérica (p. ej., 1 a 5). Mínimo 3 ítems.",
+                                     "One CSV column per item, with the numeric answer (e.g., 1 to 5). At least 3 items."))
+                st.text_input(t("q_reverse_items", lang), key="k_reverse_items",
+                              help=L("Ítems redactados en sentido contrario (p. ej., «A menudo me siento inútil» en una escala de autoestima). "
+                                     "Escribe aquí sus respuestas tal cual: PsicoStat los invierte (mín. + máx. − x).",
+                                     "Items worded in the opposite direction (e.g., “I often feel useless” in a self-esteem scale). "
+                                     "Enter the raw answers: PsicoStat reverses them (min + max − x)."))
+                c2.number_input(t("q_scale_min", lang), step=1.0, key="k_scale_min", help=L("La opción de respuesta más baja (p. ej., 1).", "The lowest response option (e.g., 1)."))
+                c3.number_input(t("q_scale_max", lang), step=1.0, key="k_scale_max", help=L("La opción de respuesta más alta (p. ej., 5).", "The highest response option (e.g., 5)."))
+                st.caption(L("Fiabilidad: α de Cronbach (IC de Feldt), ω de McDonald (modelo de un factor), correlación ítem-resto y α si se elimina el ítem.",
+                             "Reliability: Cronbach's α (Feldt CI), McDonald's ω (one-factor model), item-rest correlation and α if item deleted."))
             else:
                 c1.selectbox(t("q_dv_type", lang), TYPES, key="k_dv_type", format_func=lambda x: t("t_" + x, lang), help=tip_type)
                 c2.selectbox(t("q_iv_type", lang), TYPES, key="k_iv_type", format_func=lambda x: t("t_" + x, lang), help=tip_type)
@@ -449,11 +473,23 @@ with main:
         elif step == 2:
             head(2, L("Decide qué efecto quieres poder detectar y con qué seguridad.", "Decide which effect you want to be able to detect, and how reliably."))
             c1, c2 = st.columns(2)
-            c1.select_slider(t("q_effect_label", lang), ["small", "medium", "large"], key="k_effect_label", format_func=lambda x: t(x, lang),
-                             help=t("effect_help", lang))
+            if ss.k_analysis == "reliability":
+                c1.select_slider(L("α de Cronbach esperado", "Expected Cronbach's α"), ["small", "medium", "large"], key="k_effect_label",
+                                 format_func=lambda x: f"α = {fmt_num(BENCHMARKS['rel'][x], True)}",
+                                 help=L("El α que esperas en tu muestra (p. ej., el publicado para la escala; sé conservador). "
+                                        "El tamaño muestral se calcula para demostrar que supera el α mínimo aceptable.",
+                                        "The α you expect in your sample (e.g., the published value for the scale; be conservative). "
+                                        "Sample size is computed to show it exceeds the minimum acceptable α."))
+            else:
+                c1.select_slider(t("q_effect_label", lang), ["small", "medium", "large"], key="k_effect_label", format_func=lambda x: t(x, lang),
+                                 help=t("effect_help", lang))
             c2.text_input(t("q_effect_custom", lang), key="k_effect_custom", placeholder="0.40",
                           help=L("Si conoces el efecto de un estudio previo o metaanálisis, escríbelo aquí (en la métrica indicada a la derecha).",
                                  "If you know the effect from a prior study or meta-analysis, enter it here (in the metric shown on the right)."))
+            if ss.k_analysis == "reliability":
+                st.number_input(t("q_alpha_null", lang), 0.0, 0.95, step=0.05, key="k_alpha_null",
+                                help=L("Valor por debajo del cual la fiabilidad no te parecería suficiente (por convención, .70 para investigación).",
+                                       "Value below which reliability would not be good enough for you (conventionally .70 for research)."))
             c1, c2, c3 = st.columns(3)
             c1.number_input(t("q_alpha", lang), 0.001, 0.2, step=0.005, format="%.3f", key="k_alpha",
                             help=L("Riesgo aceptado de un falso positivo. Por convención, .05.", "Accepted risk of a false positive. Conventionally .05."))
@@ -476,12 +512,14 @@ with main:
                 st.error(design_error)
             else:
                 rec, ssz = recommend(design), sample_size(design)
-                fam = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR", "path": "a = b"}.get(ssz["family"], ssz["family"])
+                fam = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR", "path": "a = b", "rel": "α"}.get(ssz["family"], ssz["family"])
+                rel = ssz["family"] == "rel"
                 cards([
                     (L("Prueba recomendada", "Recommended test"), cap(rec.label(lang).split(" (")[0]), L("Alternativa: ", "Fallback: ") + rec.fallback_label(lang), ""),
                     (L("Tamaño muestral", "Sample size"), f"N = {ssz['n_total']}",
                      (f"{ssz['n_per_group']} {t('per_group', lang)}" if ssz["n_per_group"] and ssz["groups"] > 1 else L("participantes", "participants")), "indigo"),
-                    (L("Efecto a detectar", "Effect to detect"), f"{fam} = {ssz['effect']:.2f}", t(ssz["effect_label"], lang) if ssz["effect_label"] != "custom" else L("valor propio", "custom value"), "amber"),
+                    ((L("α esperado", "Expected α"), f"α = {fmt_num(ssz['effect'], True)}", f"H₀: α = {fmt_num(design.alpha_null, True)}", "amber") if rel else
+                     (L("Efecto a detectar", "Effect to detect"), f"{fam} = {ssz['effect']:.2f}", t(ssz["effect_label"], lang) if ssz["effect_label"] != "custom" else L("valor propio", "custom value"), "amber")),
                     ("α · " + L("potencia", "power"), f"{fmt_num(design.alpha, True)} · {fmt_num(design.power, True)}",
                      (L("unilateral", "one-sided") if ssz.get("one_sided") else L("bilateral", "two-sided")), "rose"),
                 ])
@@ -544,13 +582,27 @@ with main:
                         es_txt = dc(f"{r0['es_symbol']} = {fmt_num(r0['es'], r0['bounded'])}") if r0["es"] is not None else "—"
                         ci_txt = (dc(f"{L('IC 95%', '95% CI')} [{fmt_num(r0['ci'][0], r0['bounded'])}, {fmt_num(r0['ci'][1], r0['bounded'])}]")
                                   if r0["ci"] else "")
-                        cards([
-                            (L("Prueba aplicada", "Test used"), cap(t(res.test, lang).split(" (")[0]),
-                             (L("alternativa por supuestos", "fallback due to assumptions") if res.fallback_reason else L("según lo planificado", "as planned")), ""),
-                            ("N", res.n, (L(f"{res.n_excluded} casos excluidos", f"{res.n_excluded} cases excluded") if res.n_excluded else L("sin exclusiones", "no exclusions")), "indigo"),
-                            (L("Tamaño del efecto", "Effect size"), es_txt, (ci_txt + (f" · {t(mag, lang)}" if mag else "")), "amber"),
-                            (r0["label"], dc(fmt_p(r0["p"])), chip, "rose"),
-                        ])
+                        if res.test == "reliability":
+                            r1 = res.rows[1]
+                            lab_a = reliability_label(r0["es"])
+
+                            def _ci(r):
+                                return (dc(f"{L('IC 95%', '95% CI')} [{fmt_num(r['ci'][0], True)}, {fmt_num(r['ci'][1], True)}]")
+                                        if r["ci"] and all(np.isfinite(r["ci"])) else "")
+                            cards([
+                                (L("Análisis", "Analysis"), L("Fiabilidad", "Reliability"), f"{len(design.items)} {L('ítems', 'items')} · {design.dv_name}", ""),
+                                ("N", res.n, (L(f"{res.n_excluded} casos excluidos", f"{res.n_excluded} cases excluded") if res.n_excluded else L("sin exclusiones", "no exclusions")), "indigo"),
+                                (L("α de Cronbach", "Cronbach's α"), dc(fmt_num(r0["es"], True)), _ci(r0) + (f" · {t(lab_a, lang)}" if lab_a else ""), "amber"),
+                                (L("ω de McDonald", "McDonald's ω"), dc(fmt_num(r1["es"], True)), _ci(r1), "rose"),
+                            ])
+                        else:
+                            cards([
+                                (L("Prueba aplicada", "Test used"), cap(t(res.test, lang).split(" (")[0]),
+                                 (L("alternativa por supuestos", "fallback due to assumptions") if res.fallback_reason else L("según lo planificado", "as planned")), ""),
+                                ("N", res.n, (L(f"{res.n_excluded} casos excluidos", f"{res.n_excluded} cases excluded") if res.n_excluded else L("sin exclusiones", "no exclusions")), "indigo"),
+                                (L("Tamaño del efecto", "Effect size"), es_txt, (ci_txt + (f" · {t(mag, lang)}" if mag else "")), "amber"),
+                                (r0["label"], dc(fmt_p(r0["p"])), chip, "rose"),
+                            ])
                         tabs = st.tabs([L("📝 Resultados APA", "📝 APA results"), L("📈 Gráficos", "📈 Plots"), L("✅ Supuestos", "✅ Assumptions"),
                                         L("🔢 Tablas", "🔢 Tables"), L("📄 Método", "📄 Method")])
                         with tabs[0]:

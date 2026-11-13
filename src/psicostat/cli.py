@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 from .analysis import analyze
-from .design import DIRECTIONAL_TESTS, Design, assumption_label, recommend
+from .design import BENCHMARKS, DIRECTIONAL_TESTS, Design, assumption_label, recommend
 from .examples import EXAMPLES, example
 from .i18n import t
 from .power import explain, sample_size
@@ -48,7 +48,7 @@ def wizard(lang="es"):
     print(t("step1", lang))
     title = _ask(t("q_title", lang), "")
     question = _ask(t("q_question", lang), "")
-    analysis = _ask(t("q_analysis", lang), 1, [(a, t("an_" + a, lang)) for a in ("compare", "correlation", "regression", "association", "mediation", "moderation")])
+    analysis = _ask(t("q_analysis", lang), 1, [(a, t("an_" + a, lang)) for a in ("compare", "correlation", "regression", "association", "mediation", "moderation", "reliability")])
     kw = dict(title=title, question=question, analysis=analysis)
     print("\n" + t("step2", lang))
     if analysis == "compare":
@@ -92,6 +92,12 @@ def wizard(lang="es"):
         if kw["moderator_type"] == "nominal":
             kw["moderator_levels"] = _list(_ask(t("q_moderator_levels", lang), "no,si"))
         kw["dv_name"] = _ask(t("q_dv_name", lang), "y")
+    elif analysis == "reliability":
+        kw["dv_name"] = _ask(t("q_scale_name", lang), "escala")
+        kw["items"] = _list(_ask(t("q_items", lang), "item1,item2,item3,item4,item5"))
+        kw["reverse_items"] = _list(_ask(t("q_reverse_items", lang), ""))
+        kw["scale_min"] = _ask(t("q_scale_min", lang), 1, cast=float)
+        kw["scale_max"] = _ask(t("q_scale_max", lang), 5, cast=float)
     else:
         kw["dv_type"] = _ask(t("q_dv_type", lang), 1, [(x, t("t_" + x, lang)) for x in ("continuous", "ordinal", "nominal")])
         kw["iv_type"] = _ask(t("q_iv_type", lang), 1, [(x, t("t_" + x, lang)) for x in ("continuous", "ordinal", "nominal")])
@@ -107,7 +113,13 @@ def wizard(lang="es"):
     kw["n_groups"] = max(len(kw.get("levels", [])), 2)
     print("\n" + t("step3", lang))
     print("  " + t("effect_help", lang))
-    kw["effect_label"] = _ask(t("q_effect_label", lang), 2, [(x, t(x, lang)) for x in ("small", "medium", "large")])
+    if analysis == "reliability":
+        kw["alpha_null"] = _ask(t("q_alpha_null", lang), 0.70, cast=float)
+        rel = BENCHMARKS["rel"]
+        kw["effect_label"] = _ask(("α de Cronbach esperado" if lang == "es" else "Expected Cronbach's α"), 2,
+                                  [(x, f"α = {rel[x]:.2f}") for x in ("small", "medium", "large")])
+    else:
+        kw["effect_label"] = _ask(t("q_effect_label", lang), 2, [(x, t(x, lang)) for x in ("small", "medium", "large")])
     custom = _ask(t("q_effect_custom", lang), "")
     kw["effect_size"] = float(custom) if custom else None
     kw["alpha"] = _ask(t("q_alpha", lang), 0.05, cast=float)

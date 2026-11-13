@@ -130,6 +130,18 @@ def example(name: str, seed: int = 42):
         w = rng.normal(30, 6, n)
         y = 10 + 0.6 * (x - 20) - 0.15 * (w - 30) - 0.03 * (x - 20) * (w - 30) + rng.normal(0, 3, n)
         df = pd.DataFrame({"id": _ids(n), "estres": x.round(1), "apoyo": w.round(1), "ansiedad": y.round(1)})
+    elif name == "reliability":
+        items = [f"bien{i}" for i in range(1, 7)]
+        d = Design(title="Fiabilidad de una escala de bienestar", question="¿Es fiable la escala de bienestar de 6 ítems en esta muestra?",
+                   analysis="reliability", dv_name="bienestar", items=items, reverse_items=["bien3", "bien6"],
+                   scale_min=1, scale_max=5)
+        n = 180
+        f = rng.normal(0, 1, n)
+        lam = np.array([.80, .75, .70, .70, .65, .55])
+        z = f[:, None] * lam + rng.normal(0, 1, (n, 6)) * np.sqrt(1 - lam ** 2)
+        x = np.clip(np.round(3 + 1.1 * z), 1, 5).astype(int)
+        x[:, [2, 5]] = 6 - x[:, [2, 5]]          # reverse-keyed items as answered
+        df = pd.DataFrame({"id": _ids(n), **{it: x[:, j] for j, it in enumerate(items)}})
     elif name == "mcnemar":
         d = Design(title="Síntoma presente antes y después", analysis="compare", design="within", dv_type="nominal",
                    n_groups=2, levels=["antes", "despues"], dv_name="insomnio", iv_name="momento")
@@ -143,4 +155,4 @@ def example(name: str, seed: int = 42):
 
 
 EXAMPLES = ["ttest", "mannwhitney", "paired", "anova", "factorial", "ancova", "rm", "mixed", "chi2",
-            "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "mcnemar"]
+            "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "reliability", "mcnemar"]

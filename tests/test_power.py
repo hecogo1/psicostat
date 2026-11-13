@@ -38,6 +38,7 @@ def test_larger_effect_needs_fewer():
     dict(design="within", dv_type="nominal", n_groups=2),
     dict(analysis="mediation", iv_type="continuous", mediator="m"),
     dict(analysis="moderation", iv_type="continuous", moderator="w"),
+    dict(analysis="reliability", items=["i1", "i2", "i3", "i4"]),
 ])
 def test_all_designs_have_n(kw):
     ss = sample_size(Design(**kw))

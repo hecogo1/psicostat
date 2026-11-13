@@ -189,6 +189,13 @@ def methods_text(design, lang="es"):
         elif d.analysis == "mediation":
             P.append(("Diseño", f"Se examinó un modelo de mediación simple con {d.iv_name} como predictor (X), "
                                 f"{d.mediator} como mediador (M) y {d.dv_name} como variable dependiente (Y)."))
+        elif d.analysis == "reliability":
+            ds = (f"Se evaluó la fiabilidad (consistencia interna) de la escala {d.dv_name}, formada por {len(d.items)} ítems "
+                  f"({', '.join(d.items)}) con formato de respuesta de {d.scale_min:g} a {d.scale_max:g}")
+            if d.reverse_items:
+                ds += (f"; los ítems {', '.join(d.reverse_items)} se recodificaron de forma inversa "
+                       f"({d.scale_min:g} + {d.scale_max:g} − x) antes del análisis")
+            P.append(("Diseño", ds + "."))
         elif d.analysis == "moderation":
             P.append(("Diseño", f"Se examinó un modelo de moderación con {d.iv_name} como predictor (X), {d.moderator} como "
                                 f"moderador (W) y {d.dv_name} como variable dependiente (Y), evaluando la interacción X × W."))
@@ -199,7 +206,9 @@ def methods_text(design, lang="es"):
         if rec.fallback:
             ana += f"Si no se cumplían los supuestos, se planificó como alternativa: {t(rec.fallback, lang)}. "
         ana += " ".join(rec.notes_text(lang)) + " "
-        ana += (f"Se informan tamaños del efecto con intervalos de confianza al 95%. El nivel de significación fue α = {fmt_num(d.alpha, True)} "
+        ana += ("Se informan los coeficientes de fiabilidad con intervalos de confianza al 95%. " if rec.test == "reliability" else
+                "Se informan tamaños del efecto con intervalos de confianza al 95%. ")
+        ana += (f"El nivel de significación fue α = {fmt_num(d.alpha, True)} "
                 f"({_tails_es(d)}). Los análisis se realizaron con PsicoStat v{__version__} (Python; SciPy y statsmodels).")
         P.append(("Análisis de datos", ana))
     else:
@@ -226,6 +235,13 @@ def methods_text(design, lang="es"):
         elif d.analysis == "mediation":
             P.append(("Design", f"A simple mediation model was examined with {d.iv_name} as predictor (X), "
                                 f"{d.mediator} as mediator (M) and {d.dv_name} as dependent variable (Y)."))
+        elif d.analysis == "reliability":
+            ds = (f"The reliability (internal consistency) of the {d.dv_name} scale was assessed; it comprises {len(d.items)} items "
+                  f"({', '.join(d.items)}) with a {d.scale_min:g}–{d.scale_max:g} response format")
+            if d.reverse_items:
+                ds += (f"; items {', '.join(d.reverse_items)} were reverse-scored ({d.scale_min:g} + {d.scale_max:g} − x) "
+                       "before the analysis")
+            P.append(("Design", ds + "."))
         elif d.analysis == "moderation":
             P.append(("Design", f"A moderation model was examined with {d.iv_name} as predictor (X), {d.moderator} as "
                                 f"moderator (W) and {d.dv_name} as dependent variable (Y), testing the X × W interaction."))
@@ -236,7 +252,9 @@ def methods_text(design, lang="es"):
         if rec.fallback:
             ana += f"If assumptions were not met, the planned alternative was: {t(rec.fallback, lang)}. "
         ana += " ".join(rec.notes_text(lang)) + " "
-        ana += (f"Effect sizes are reported with 95% confidence intervals. The significance level was α = {fmt_num(d.alpha, True)} "
+        ana += ("Reliability coefficients are reported with 95% confidence intervals. " if rec.test == "reliability" else
+                "Effect sizes are reported with 95% confidence intervals. ")
+        ana += (f"The significance level was α = {fmt_num(d.alpha, True)} "
                 f"({_tails_en(d)}). Analyses were run with PsicoStat v{__version__} (Python; SciPy and statsmodels).")
         P.append(("Data analysis", ana))
     return P
@@ -286,6 +304,8 @@ def results_text(res, lang="es"):
             if wrong:
                 s += " The observed effect goes in the opposite direction to the hypothesis, so the one-tailed test cannot support an effect in that direction."
         out.append(s)
+    if res.test == "reliability":      # the APA paragraph is built in the analysis (notes); no "significant" boilerplate
+        return [p for p in out if p]
     # main results
     tl = t(res.test, lang)
     sents = []
@@ -331,7 +351,9 @@ def _tables(res, lang):
                 "paths": ("Sendas de mediación", "Mediation paths"),
                 "indirect": ("Efecto indirecto (bootstrap)", "Indirect effect (bootstrap)"),
                 "r2_change": ("Cambio en R² por la interacción X × W", "R² change due to the X × W interaction"),
-                "simple_slopes": ("Pendientes simples de X según W", "Simple slopes of X by W")}.get(k, (k, k))[_L(lang)]
+                "simple_slopes": ("Pendientes simples de X según W", "Simple slopes of X by W"),
+                "reliability": ("Coeficientes de fiabilidad", "Reliability coefficients"),
+                "items": ("Estadísticos de los ítems", "Item statistics")}.get(k, (k, k))[_L(lang)]
         tabs.append((name, v))
     if res.posthoc is not None:
         tabs.append(((f"Post hoc: {res.posthoc_method}"), res.posthoc))

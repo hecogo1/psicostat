@@ -28,6 +28,7 @@ T = {
     "mediation": ("mediación simple (efecto indirecto con IC bootstrap)", "simple mediation (indirect effect with bootstrap CI)"),
     "moderation": ("moderación (regresión con interacción X × W y pendientes simples)",
                    "moderation (regression with X × W interaction and simple slopes)"),
+    "reliability": ("fiabilidad de la escala (α de Cronbach y ω de McDonald)", "scale reliability (Cronbach's α and McDonald's ω)"),
     # assumptions
     "a_normality": ("Normalidad (Shapiro-Wilk)", "Normality (Shapiro-Wilk)"),
     "a_homogeneity": ("Homogeneidad de varianzas (Levene, mediana)", "Homogeneity of variance (Levene, median)"),
@@ -41,10 +42,14 @@ T = {
     "a_epv": ("Eventos por predictor ≥ 10", "Events per predictor ≥ 10"),
     "a_outliers": ("Valores atípicos (|z| > 3)", "Outliers (|z| > 3)"),
     "a_linearity": ("Linealidad (inspección del diagrama de dispersión)", "Linearity (inspect scatterplot)"),
+    "a_unidimensionality": ("Unidimensionalidad (modelo de un factor: χ² y RMSEA ≤ .08)", "Unidimensionality (one-factor model: χ² and RMSEA ≤ .08)"),
     "a_independent_obs": ("Independencia de las observaciones (por diseño)", "Independence of observations (by design)"),
     # magnitudes
     "negligible": ("insignificante", "negligible"), "small": ("pequeño", "small"),
     "medium": ("mediano", "medium"), "large": ("grande", "large"),
+    # reliability benchmarks (George & Mallery, 2003; orientative only)
+    "rel_excellent": ("excelente", "excellent"), "rel_good": ("buena", "good"), "rel_acceptable": ("aceptable", "acceptable"),
+    "rel_questionable": ("cuestionable", "questionable"), "rel_poor": ("pobre", "poor"), "rel_unacceptable": ("inaceptable", "unacceptable"),
     # wizard / ui
     "app_title": ("PsicoStat · Asistente de metodología y estadística", "PsicoStat · Methods & statistics assistant"),
     "step1": ("1. Pregunta y diseño", "1. Question & design"),
@@ -62,6 +67,7 @@ T = {
     "an_association": ("Asociación entre dos variables categóricas", "Association between two categorical variables"),
     "an_mediation": ("Mediación simple (X → M → Y)", "Simple mediation (X → M → Y)"),
     "an_moderation": ("Moderación: ¿depende el efecto de X de una tercera variable W?", "Moderation: does the effect of X depend on a third variable W?"),
+    "an_reliability": ("Fiabilidad de una escala o cuestionario (α y ω)", "Reliability of a scale or questionnaire (α and ω)"),
     "q_design": ("Tipo de diseño", "Design type"),
     "d_between": ("Entre sujetos (grupos independientes)", "Between-subjects (independent groups)"),
     "d_within": ("Intra sujetos / medidas repetidas (muestras relacionadas)", "Within-subjects / repeated measures (paired)"),
@@ -88,6 +94,12 @@ T = {
     "q_moderator_type": ("Tipo de moderador W", "Moderator W type"),
     "q_moderator_levels": ("Categorías de W (dos, separadas por comas)", "W categories (two, comma separated)"),
     "q_center": ("Centrar X y W en la media (recomendado)", "Mean-centre X and W (recommended)"),
+    "q_scale_name": ("Nombre de la escala (sin espacios)", "Scale name (no spaces)"),
+    "q_items": ("Ítems de la escala (columnas, separadas por comas)", "Scale items (columns, comma separated)"),
+    "q_reverse_items": ("Ítems inversos (separados por comas, opcional)", "Reverse-keyed items (comma separated, optional)"),
+    "q_scale_min": ("Valor mínimo de respuesta", "Lowest response value"),
+    "q_scale_max": ("Valor máximo de respuesta", "Highest response value"),
+    "q_alpha_null": ("α mínimo aceptable (H₀)", "Minimum acceptable α (H₀)"),
     "q_covariates": ("Covariables (separadas por comas, opcional)", "Covariates (comma separated, optional)"),
     "q_effect_label": ("Tamaño del efecto esperado", "Expected effect size"),
     "q_effect_custom": ("Valor concreto (opcional; vacío = usar la etiqueta)", "Custom value (optional; empty = use label)"),
@@ -98,10 +110,12 @@ T = {
     "q_event_rate": ("Proporción esperada del evento (VD = 1)", "Expected event proportion (DV = 1)"),
     "effect_help": (
         "Guía de Cohen (1988): d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35 (también la interacción en moderación); "
-        "sendas de mediación a=b = .14/.39/.59 (Fritz y MacKinnon, 2007). "
+        "sendas de mediación a=b = .14/.39/.59 (Fritz y MacKinnon, 2007); "
+        "en fiabilidad, el «efecto» es el α de Cronbach esperado (.80/.85/.90) frente al mínimo aceptable (.70 por defecto). "
         "Mejor aún: usa el efecto de un metaanálisis o estudio previo (y sé conservador: los efectos publicados suelen estar inflados).",
         "Cohen (1988) benchmarks: d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35 (also the moderation interaction); "
-        "mediation paths a=b = .14/.39/.59 (Fritz and MacKinnon, 2007). "
+        "mediation paths a=b = .14/.39/.59 (Fritz and MacKinnon, 2007); "
+        "for reliability, the “effect” is the expected Cronbach's α (.80/.85/.90) against the minimum acceptable value (.70 by default). "
         "Better: use the effect from a meta-analysis or prior study (and be conservative: published effects tend to be inflated)."),
     "recommended": ("Prueba recomendada", "Recommended test"),
     "fallback": ("Alternativa no paramétrica / si fallan supuestos", "Nonparametric / fallback alternative"),
