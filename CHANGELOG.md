@@ -4,6 +4,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 
 ## [Sin publicar] / Unreleased
 
+### Añadido / Added
+- Fiabilidad de escalas (nuevo tipo de análisis): α de Cronbach con IC 95% exacto de Feldt et al. (1987) y prueba F de H₀: α = α mínimo aceptable (.70 por defecto), α estandarizado y correlación media entre ítems; ω total de McDonald (1999) a partir de un modelo de un factor por máxima verosimilitud, con IC 95% bootstrap percentil (1000 remuestreos); tabla por ítem (M, DT, correlación ítem-resto corregida, α si se elimina, carga factorial) y gráfico de correlaciones ítem-resto; recodificación automática de ítems inversos (mín. + máx. − x); comprobación orientativa de la unidimensionalidad (χ² con corrección de Bartlett y RMSEA del modelo de un factor); avisos de ítems con correlación negativa o < .30, de ítems cuya eliminación elevaría α y de α > .95; etiqueta orientativa de George y Mallery (2003); N a priori por la fórmula de Bonett (2002), validada con su tabla 1. α validado frente a pingouin y las cargas/ω frente a factor_analyzer. Plantilla CSV (una columna por ítem), ejemplo `reliability`, CLI y asistente web (#30) / Scale reliability: Cronbach's α with Feldt exact CI and F test against a minimum α, McDonald's ω (one-factor ML) with bootstrap CI, item statistics, reverse-keyed items, unidimensionality check, Bonett (2002) sample size, template, `reliability` example, CLI and web wizard; validated against pingouin and factor_analyzer.
+
 ## [0.5.0] - 2026-11-10
 
 ### Añadido / Added

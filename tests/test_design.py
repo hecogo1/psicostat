@@ -25,6 +25,7 @@ from psicostat import Design, recommend
     (dict(analysis="regression", dv_type="nominal", iv_type="continuous"), "logreg", None),
     (dict(analysis="mediation", iv_type="continuous", mediator="m", iv_name="x", dv_name="y"), "mediation", None),
     (dict(analysis="moderation", iv_type="continuous", moderator="w", iv_name="x", dv_name="y"), "moderation", None),
+    (dict(analysis="reliability", items=["i1", "i2", "i3"]), "reliability", None),
 ])
 def test_recommend(kw, test, fallback):
     r = recommend(Design(**kw))

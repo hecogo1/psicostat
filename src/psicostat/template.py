@@ -38,6 +38,13 @@ def columns(d: Design):
         else:
             cols.append((d.moderator, "Moderador (W)", "Moderator (W)", "continuous", ""))
         cols.append((d.dv_name, "Variable dependiente (Y)", "Dependent variable (Y)", "continuous", ""))
+    elif rec.test == "reliability":
+        rng = f"{d.scale_min:g}–{d.scale_max:g}"
+        for i, it in enumerate(d.items, 1):
+            inv = it in d.reverse_items
+            cols.append((it, f"Ítem {i} de la escala {d.dv_name}" + (" (inverso: se recodifica automáticamente)" if inv else ""),
+                         f"Item {i} of the {d.dv_name} scale" + (" (reverse-keyed: recoded automatically)" if inv else ""),
+                         "ordinal", rng))
     elif rec.test in ("linreg", "logreg", "ordreg"):
         for p in d.predictors:
             cols.append((p, "Predictor", "Predictor", d.iv_type,
@@ -86,7 +93,7 @@ def make_template(d: Design, n: int = 20):
     df = pd.DataFrame({c: [""] * n for c in names})
     df["id"] = [f"P{i + 1:03d}" for i in range(n)]
     rec = recommend(d)
-    if d.design in ("between", "mixed") and rec.test not in ("chi2", "fisher", "pearson", "spearman", "linreg", "logreg", "ordreg", "mediation", "moderation"):
+    if d.design in ("between", "mixed") and rec.test not in ("chi2", "fisher", "pearson", "spearman", "linreg", "logreg", "ordreg", "mediation", "moderation", "reliability"):
         if d.n_factors == 2 and d.design == "between":
             cells = [(a, b) for a in d.levels for b in d.levels_b]
             df[d.iv_name] = [cells[i % len(cells)][0] for i in range(n)]

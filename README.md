@@ -12,8 +12,8 @@
 
 PsicoStat te guía paso a paso desde la pregunta de investigación hasta el texto de **Método** y **Resultados** en estilo **APA 7**, en español o inglés:
 
-1. **Asistente**: te pregunta el diseño (entre sujetos, intra sujetos, mixto, correlacional, regresión, asociación, mediación, moderación), número de grupos o condiciones, nivel de medida de las variables, covariables, tamaño del efecto esperado (con la guía de Cohen), α y potencia.
-2. **Prueba recomendada**: t de Welch, t pareada, Mann-Whitney, Wilcoxon, ANOVA de un factor / Welch / factorial / medidas repetidas / mixto, ANCOVA, Kruskal-Wallis, Friedman, chi-cuadrado / Fisher, McNemar, Q de Cochran, Pearson / Spearman, regresión lineal, logística y logística ordinal (odds proporcionales), mediación simple (efecto indirecto con IC bootstrap), moderación (interacción X × W con ΔR², pendientes simples y gráfico); con supuestos a comprobar y alternativa no paramétrica.
+1. **Asistente**: te pregunta el diseño (entre sujetos, intra sujetos, mixto, correlacional, regresión, asociación, mediación, moderación, fiabilidad de una escala), número de grupos o condiciones, nivel de medida de las variables, covariables, tamaño del efecto esperado (con la guía de Cohen), α y potencia.
+2. **Prueba recomendada**: t de Welch, t pareada, Mann-Whitney, Wilcoxon, ANOVA de un factor / Welch / factorial / medidas repetidas / mixto, ANCOVA, Kruskal-Wallis, Friedman, chi-cuadrado / Fisher, McNemar, Q de Cochran, Pearson / Spearman, regresión lineal, logística y logística ordinal (odds proporcionales), mediación simple (efecto indirecto con IC bootstrap), moderación (interacción X × W con ΔR², pendientes simples y gráfico), fiabilidad de escalas (α de Cronbach con IC de Feldt, ω de McDonald, correlación ítem-resto y α si se elimina el ítem, con recodificación de ítems inversos); con supuestos a comprobar y alternativa no paramétrica.
 3. **Tamaño muestral a priori**, explicado y validado frente a G*Power.
 4. **Plantilla CSV** con las columnas exactas de tu diseño + **diccionario de datos**.
 5. **Análisis** del CSV relleno: descriptivos, supuestos (Shapiro-Wilk, Levene, Mauchly, Breusch-Pagan, VIF, Brant…), la prueba (con cambio automático a la alternativa si fallan los supuestos), **tamaños del efecto con IC 95%**, post hoc (Tukey, Games-Howell, Dunn, Holm) y gráficos.
@@ -71,7 +71,7 @@ psicostat template estudio/diseno.json --n 60 --out estudio/plantilla.csv
 psicostat analyze estudio/diseno.json estudio/plantilla.csv --out estudio/resultados
 
 # Ejemplos simulados: ttest, mannwhitney, paired, anova, factorial, ancova, rm, mixed,
-# chi2, correlation, regression, logistic, ordinal, mediation, moderation, mcnemar
+# chi2, correlation, regression, logistic, ordinal, mediation, moderation, reliability, mcnemar
 psicostat example anova --out ejemplo
 psicostat analyze ejemplo/diseno.json ejemplo/datos.csv --out ejemplo/resultados
 ```
@@ -120,6 +120,7 @@ Ver [`examples/`](examples/) para informes completos generados con los datos de 
 | Heterocedasticidad en regresión | Errores típicos HC3 |
 | Pruebas de rangos | N a priori ÷ 0.864 (eficiencia relativa asintótica) |
 | Regresión logística | 10 eventos por predictor (mín. 100) |
+| Fiabilidad de una escala | α de Cronbach con IC exacto de Feldt et al. (1987) y prueba F frente al α mínimo (.70 por defecto) + ω total de McDonald (modelo de un factor por máxima verosimilitud, IC bootstrap), porque α supone tau-equivalencia (McNeish, 2018); los ítems inversos se recodifican (mín. + máx. − x); N a priori por Bonett (2002) |
 | Regresión con VD ordinal (p. ej., un ítem Likert) | Regresión logística ordinal de odds proporcionales + prueba de Brant (1990); N a priori por Whitehead (1993). La suma de varios ítems se trata como cuantitativa |
 
 Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.json`.
@@ -133,21 +134,28 @@ Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.
 - Aguinis, H., Beaty, J. C., Boik, R. J., & Pierce, C. A. (2005). Effect size and power in assessing moderating effects of categorical variables using multiple regression: A 30-year review. *Journal of Applied Psychology, 90*(1), 94–107.
 - Aiken, L. S., & West, S. G. (1991). *Multiple regression: Testing and interpreting interactions*. Sage.
 - American Psychological Association. (2020). *Publication manual of the American Psychological Association* (7th ed.).
+- Bonett, D. G. (2002). Sample size requirements for testing and estimating coefficient alpha. *Journal of Educational and Behavioral Statistics, 27*(4), 335–340.
 - Brant, R. (1990). Assessing proportionality in the proportional odds model for ordinal logistic regression. *Biometrics, 46*(4), 1171–1178.
 - Clopper, C. J., & Pearson, E. S. (1934). The use of confidence or fiducial limits illustrated in the case of the binomial. *Biometrika, 26*(4), 404–413.
 - Cohen, J. (1988). *Statistical power analysis for the behavioral sciences* (2nd ed.). Erlbaum.
+- Cronbach, L. J. (1951). Coefficient alpha and the internal structure of tests. *Psychometrika, 16*(3), 297–334.
 - DeLong, E. R., DeLong, D. M., & Clarke-Pearson, D. L. (1988). Comparing the areas under two or more correlated receiver operating characteristic curves: A nonparametric approach. *Biometrics, 44*(3), 837–845.
 - Delacre, M., Lakens, D., & Leys, C. (2017). Why psychologists should by default use Welch's t-test. *International Review of Social Psychology, 30*(1), 92–101.
 - Faul, F., Erdfelder, E., Lang, A.-G., & Buchner, A. (2007). G*Power 3. *Behavior Research Methods, 39*, 175–191.
+- Feldt, L. S., Woodruff, D. J., & Salih, F. A. (1987). Statistical inference for coefficient alpha. *Applied Psychological Measurement, 11*(1), 93–103.
 - Fritz, M. S., & MacKinnon, D. P. (2007). Required sample size to detect the mediated effect. *Psychological Science, 18*(3), 233–239.
+- George, D., & Mallery, P. (2003). *SPSS for Windows step by step: A simple guide and reference* (4th ed.). Allyn & Bacon.
 - Hayes, A. F. (2022). *Introduction to mediation, moderation, and conditional process analysis* (3rd ed.). Guilford Press.
 - Hosmer, D. W., Lemeshow, S., & Sturdivant, R. X. (2013). *Applied logistic regression* (3rd ed.). Wiley.
 - Hsieh, F. Y., Bloch, D. A., & Larsen, M. D. (1998). A simple method of sample size calculation for linear and logistic regression. *Statistics in Medicine, 17*(14), 1623–1634.
 - Lakens, D. (2022). Sample size justification. *Collabra: Psychology, 8*(1), 33267.
 - McCullagh, P. (1980). Regression models for ordinal data. *Journal of the Royal Statistical Society: Series B, 42*(2), 109–142.
+- McDonald, R. P. (1999). *Test theory: A unified treatment*. Erlbaum.
+- McNeish, D. (2018). Thanks coefficient alpha, we'll take it from here. *Psychological Methods, 23*(3), 412–433.
 - Peduzzi, P., et al. (1996). A simulation study of the number of events per variable in logistic regression analysis. *Journal of Clinical Epidemiology, 49*(12), 1373–1379.
 - Serlin, R. C., Carr, J., & Marascuilo, L. A. (1982). A measure of association for selected nonparametric procedures. *Psychological Bulletin, 92*(3), 786–790.
 - Steiger, J. H. (2004). Beyond the F test: Effect size confidence intervals. *Psychological Methods, 9*(2), 164–182.
+- Streiner, D. L. (2003). Starting at the beginning: An introduction to coefficient alpha and internal consistency. *Journal of Personality Assessment, 80*(1), 99–103.
 - Whitehead, J. (1993). Sample size calculations for ordered categorical data. *Statistics in Medicine, 12*(24), 2257–2271.
 
 ---
@@ -157,7 +165,7 @@ Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.
 
 **PsicoStat** guides psychology students and researchers step by step from the research question to APA 7 **Method** and **Results** text, in Spanish or English.
 
-**Features**: guided wizard (design, groups/conditions, measurement levels, covariates, mediation, moderation, expected effect size with Cohen's benchmarks, α, power) → recommended test with assumptions and nonparametric fallback (including simple mediation with bootstrap CI for the indirect effect, and moderation with the X × W interaction, ΔR², simple slopes and an interaction plot) → a priori sample size (validated against G*Power; Fritz & MacKinnon for mediation) → CSV template + data dictionary → analysis (descriptives, assumption checks, test, effect sizes with 95% CIs, post hoc tests, plots) → APA 7 report in Markdown and DOCX.
+**Features**: guided wizard (design, groups/conditions, measurement levels, covariates, mediation, moderation, expected effect size with Cohen's benchmarks, α, power) → recommended test with assumptions and nonparametric fallback (including simple mediation with bootstrap CI for the indirect effect, moderation with the X × W interaction, ΔR², simple slopes and an interaction plot, and scale reliability with Cronbach's α (Feldt CI), McDonald's ω and item statistics) → a priori sample size (validated against G*Power; Fritz & MacKinnon for mediation; Bonett for reliability) → CSV template + data dictionary → analysis (descriptives, assumption checks, test, effect sizes with 95% CIs, post hoc tests, plots) → APA 7 report in Markdown and DOCX.
 
 ### About
 

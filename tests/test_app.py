@@ -103,3 +103,31 @@ def test_moderation_in_ui():
     assert not at.exception
     html = " ".join(m.value for m in at.markdown)
     assert "estres × apoyo" in html and "f²" in html and "pendiente simple" in html
+
+
+def test_reliability_in_ui():
+    at = _app()
+    at.selectbox(key="k_example").set_value("reliability").run()
+    at.button(key="nav_1").click().run()
+    assert not at.exception
+    assert at.text_input(key="k_items").value.startswith("bien1, bien2")
+    assert at.text_input(key="k_reverse_items").value == "bien3, bien6"
+    at.button(key="nav_3").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "H₀: α = .70" in html and "N = " in html
+    at.button(key="nav_5").click().run()
+    at.button(key="run").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "α de Cronbach" in html and "ω de McDonald" in html
+
+
+def test_switch_to_reliability_fills_default_items():
+    at = _app()
+    at.radio(key="k_analysis").set_value("reliability").run()
+    at.button(key="nav_1").click().run()
+    assert not at.exception
+    assert at.text_input(key="k_items").value == "item1, item2, item3, item4, item5"
+    at.button(key="nav_3").click().run()
+    assert not at.exception

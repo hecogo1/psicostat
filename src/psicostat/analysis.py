@@ -17,6 +17,7 @@ import statsmodels.formula.api as smf
 from cycler import cycler
 from scipy import stats
 from statsmodels.miscmodels.ordinal_model import OrderedModel
+from statsmodels.multivariate.factor import Factor
 from statsmodels.stats.anova import AnovaRM, anova_lm
 from statsmodels.stats.contingency_tables import cochrans_q, mcnemar
 from statsmodels.stats.diagnostic import het_breuschpagan
@@ -352,6 +353,8 @@ def analyze(d: Design, data, outdir=None) -> Result:
         numeric_cols = [] if d.iv_type == "nominal" else [c for c in numeric_cols if c != d.dv_name]
     if rec.test == "mediation":
         numeric_cols = [d.mediator, d.dv_name] + ([] if d.iv_type == "nominal" else [d.iv_name])
+    if rec.test == "reliability":
+        numeric_cols = list(d.items)
     if rec.test == "moderation":
         numeric_cols = ([d.dv_name] + ([] if d.iv_type == "nominal" else [d.iv_name])
                         + ([] if d.moderator_type == "nominal" else [d.moderator]))
@@ -369,7 +372,7 @@ def analyze(d: Design, data, outdir=None) -> Result:
         "anova_rm": _rm, "friedman": _rm, "anova_mixed": _mixed,
         "chi2": _chi2, "fisher": _chi2, "mcnemar": _mcnemar, "cochran": _cochran,
         "pearson": _corr, "spearman": _corr, "linreg": _linreg, "logreg": _logreg, "ordreg": _ordreg, "mediation": _mediation,
-        "moderation": _moderation,
+        "moderation": _moderation, "reliability": _reliability,
     }[rec.test]
     fn(d, df, res, outdir)
     return res
@@ -1422,3 +1425,213 @@ def _plot_moderation(x, y, mx, mw, params, probes, w_lv, x_lv, x_lab, w_name, y_
     ax.legend(frameon=False, fontsize=9)
     ax.spines[["top", "right"]].set_visible(False)
     return _save(fig, outdir, name)
+
+
+# ------------------------------------------------------------------ reliability (Cronbach's α, McDonald's ω)
+N_BOOT_OMEGA = 1000
+
+
+def cronbach_alpha(X):
+    """Raw (covariance-based) Cronbach's α of an n × k item matrix (Cronbach, 1951)."""
+    X = np.asarray(X, float)
+    k = X.shape[1]
+    return float(k / (k - 1) * (1 - X.var(axis=0, ddof=1).sum() / X.sum(axis=1).var(ddof=1)))
+
+
+def feldt_ci(alpha, n, k, level=0.95):
+    """Exact CI for α assuming (1 − α)/(1 − α̂) ~ F(n − 1, (n − 1)(k − 1)) (Feldt, Woodruff & Salih, 1987)."""
+    df1, df2 = n - 1, (n - 1) * (k - 1)
+    q = (1 - level) / 2
+    return (float(1 - (1 - alpha) * stats.f.ppf(1 - q, df1, df2)), float(1 - (1 - alpha) * stats.f.ppf(q, df1, df2)))
+
+
+def feldt_test(alpha, n, k, alpha0):
+    """Feldt (1965) F test of H₀: α = alpha0. F = (1 − alpha0) / (1 − α̂); two-sided p."""
+    df1, df2 = n - 1, (n - 1) * (k - 1)
+    f = (1 - alpha0) / (1 - alpha) if alpha < 1 else np.inf
+    p = 2 * min(stats.f.sf(f, df1, df2), stats.f.cdf(f, df1, df2))
+    return float(f), df1, df2, float(min(p, 1.0))
+
+
+def one_factor_ml(X):
+    """Standardized loadings and uniquenesses of a one-factor model fitted by maximum likelihood (correlation metric)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fa = Factor(np.asarray(X, float), n_factor=1, method="ml").fit()
+    lam = np.real(np.asarray(fa.loadings, dtype=complex)).ravel()
+    psi = np.real(np.asarray(fa.uniqueness, dtype=complex)).ravel()
+    if lam.sum() < 0:
+        lam = -lam
+    return lam, psi
+
+
+def mcdonald_omega(X, lam=None, psi=None):
+    """McDonald's (1999) ω total from a one-factor ML model on the item covariances:
+    ω = (Σλᵢ)² / [(Σλᵢ)² + Σψᵢ] with unstandardized loadings λᵢ·sᵢ and uniquenesses ψᵢ·sᵢ²."""
+    X = np.asarray(X, float)
+    if lam is None:
+        lam, psi = one_factor_ml(X)
+    sd = X.std(axis=0, ddof=1)
+    num = float((lam * sd).sum()) ** 2
+    return num / (num + float((psi * sd ** 2).sum()))
+
+
+def one_factor_fit(X, lam, psi):
+    """Bartlett-corrected likelihood-ratio χ² of the one-factor model (as R `factanal`), df and RMSEA."""
+    X = np.asarray(X, float)
+    n, p = X.shape
+    dfm = ((p - 1) ** 2 - (p + 1)) / 2
+    if dfm <= 0:
+        return None
+    R = np.corrcoef(X, rowvar=False)
+    S = np.outer(lam, lam) + np.diag(psi)
+    fml = np.linalg.slogdet(S)[1] - np.linalg.slogdet(R)[1] + np.trace(R @ np.linalg.inv(S)) - p
+    chi2 = max(float((n - 1 - (2 * p + 5) / 6 - 2 / 3) * fml), 0.0)
+    pval = float(stats.chi2.sf(chi2, dfm))
+    rmsea = float(np.sqrt(max(chi2 - dfm, 0) / (dfm * (n - 1))))
+    return chi2, int(dfm), pval, rmsea
+
+
+def bootstrap_omega(X, n_boot=N_BOOT_OMEGA, seed=0):
+    """Percentile bootstrap 95% CI of ω (resamples with a constant item are skipped)."""
+    X = np.asarray(X, float)
+    n = len(X)
+    rng = np.random.default_rng(seed)
+    vals = []
+    for _ in range(n_boot):
+        Xb = X[rng.integers(0, n, n)]
+        if np.any(np.ptp(Xb, axis=0) == 0):
+            continue
+        try:
+            w = mcdonald_omega(Xb)
+        except (np.linalg.LinAlgError, ValueError):
+            continue
+        if np.isfinite(w):
+            vals.append(w)
+    if len(vals) < n_boot / 2:
+        return np.nan, np.nan
+    return float(np.percentile(vals, 2.5)), float(np.percentile(vals, 97.5))
+
+
+def reliability_label(v):
+    """Orientative label for a reliability coefficient (George & Mallery, 2003)."""
+    if v is None or not np.isfinite(v):
+        return None
+    for thr, key in ((.9, "rel_excellent"), (.8, "rel_good"), (.7, "rel_acceptable"), (.6, "rel_questionable"), (.5, "rel_poor")):
+        if v >= thr:
+            return key
+    return "rel_unacceptable"
+
+
+def _reliability(d, df, res, outdir):
+    from .i18n import t as _t
+    items, scale = list(d.items), d.dv_name
+    X = df[items].to_numpy(float)
+    n, k = X.shape
+    if n < max(10, k + 2):
+        raise DataError(f"Muy pocos casos para estimar la fiabilidad (N = {n}; mínimo {max(10, k + 2)}) / "
+                        f"too few cases to estimate reliability (N = {n}; minimum {max(10, k + 2)})")
+    lo_s, hi_s = d.scale_min, d.scale_max
+    for it in d.reverse_items:
+        j = items.index(it)
+        if X[:, j].min() < lo_s or X[:, j].max() > hi_s:
+            raise DataError(f"El ítem inverso {it} tiene valores fuera de la escala {lo_s:g}–{hi_s:g}: revisa el mínimo y el máximo / "
+                            f"reverse-keyed item {it} has values outside the {lo_s:g}–{hi_s:g} range: check the minimum and maximum")
+        X[:, j] = lo_s + hi_s - X[:, j]
+    const = [it for it, v in zip(items, np.ptp(X, axis=0)) if v == 0]
+    if const:
+        raise DataError(f"Ítems sin variabilidad / items with no variance: {const}")
+    total = X.sum(axis=1)
+    res.descriptives = _desc({f"{scale} (total)": total})
+    alpha = cronbach_alpha(X)
+    a_lo, a_hi = feldt_ci(alpha, n, k)
+    f_stat, df1, df2, p_f = feldt_test(alpha, n, k, d.alpha_null)
+    R = np.corrcoef(X, rowvar=False)
+    r_bar = float(R[np.triu_indices(k, 1)].mean())
+    alpha_std = k * r_bar / (1 + (k - 1) * r_bar)
+    lam, psi = one_factor_ml(X)
+    omega = mcdonald_omega(X, lam, psi)
+    o_lo, o_hi = bootstrap_omega(X)
+    fit = one_factor_fit(X, lam, psi)
+    if fit is None:
+        res.assumptions.append({"key": "a_unidimensionality", "p": None, "ok": True,
+                                "detail": "k = 3: modelo saturado (gl = 0), no evaluable / saturated model (df = 0), not testable"})
+    else:
+        chi2, dfm, p_fit, rmsea = fit
+        res.assumptions.append({"key": "a_unidimensionality", "p": p_fit, "ok": rmsea <= .08,
+                                "detail": f"χ²({dfm}) = {chi2:.2f}, {E.fmt_p(p_fit)}, RMSEA = {E.fmt_num(rmsea, True, 3)}"})
+    rows = []
+    for j, it in enumerate(items):
+        rest = total - X[:, j]
+        rows.append({"ítem/item": it, "inverso/reversed": "sí/yes" if it in d.reverse_items else "no",
+                     "M": X[:, j].mean(), "DT/SD": X[:, j].std(ddof=1),
+                     "r ítem-resto/item-rest": float(np.corrcoef(X[:, j], rest)[0, 1]),
+                     "α si se elimina/if deleted": cronbach_alpha(np.delete(X, j, axis=1)),
+                     "λ (carga/loading)": float(lam[j])})
+    items_tab = pd.DataFrame(rows)
+    res.extra_tables["reliability"] = pd.DataFrame([{
+        "k": k, "N": n, "α": alpha, "α IC95_inf/CI95_low": a_lo, "α IC95_sup/CI95_high": a_hi, "α estandarizado/standardized": alpha_std,
+        "r media entre ítems/mean inter-item r": r_bar, "ω": omega, "ω IC95_inf/CI95_low": o_lo, "ω IC95_sup/CI95_high": o_hi}])
+    res.extra_tables["items"] = items_tab
+    res.rows += [
+        _row("α de Cronbach / Cronbach's α", "F", f"{df1}, {df2}", f_stat, p_f, "α", alpha, (a_lo, a_hi), bounded=True),
+        _row("ω de McDonald / McDonald's ω", "ω", None, omega, None, "ω", omega, (o_lo, o_hi), bounded=True),
+    ]
+    fmt = lambda v: E.fmt_num(v, True)  # noqa: E731
+    lab = reliability_label(alpha)
+    c0 = fmt(d.alpha_null)
+    if p_f < d.alpha:
+        t_es = (f"El α fue significativamente {'superior' if alpha > d.alpha_null else 'inferior'} a {c0}, "
+                f"F({df1}, {df2}) = {E.fmt_num(f_stat)}, {E.fmt_p(p_f)}.")
+        t_en = (f"α was significantly {'higher' if alpha > d.alpha_null else 'lower'} than {c0}, "
+                f"F({df1}, {df2}) = {E.fmt_num(f_stat)}, {E.fmt_p(p_f)}.")
+    else:
+        t_es = f"El α no difirió significativamente de {c0}, F({df1}, {df2}) = {E.fmt_num(f_stat)}, {E.fmt_p(p_f)}."
+        t_en = f"α did not differ significantly from {c0}, F({df1}, {df2}) = {E.fmt_num(f_stat)}, {E.fmt_p(p_f)}."
+    ir = items_tab["r ítem-resto/item-rest"]
+    inv_es = f"; ítems inversos recodificados: {', '.join(d.reverse_items)}" if d.reverse_items else ""
+    inv_en = f"; reverse-scored items: {', '.join(d.reverse_items)}" if d.reverse_items else ""
+    o_ci = f", IC 95% [{fmt(o_lo)}, {fmt(o_hi)}] (bootstrap percentil, {N_BOOT_OMEGA} remuestreos)" if np.isfinite(o_lo) else ""
+    o_ci_en = f", 95% CI [{fmt(o_lo)}, {fmt(o_hi)}] (percentile bootstrap, {N_BOOT_OMEGA} resamples)" if np.isfinite(o_lo) else ""
+    res.notes.append((
+        f"Fiabilidad de la escala {scale} ({k} ítems{inv_es}): la consistencia interna fue {_t(lab, 'es')} según α (George y Mallery, 2003), "
+        f"α de Cronbach = {fmt(alpha)}, IC 95% [{fmt(a_lo)}, {fmt(a_hi)}] (Feldt et al., 1987), y ω de McDonald = {fmt(omega)}{o_ci}. "
+        f"{t_es} La correlación media entre ítems fue de {fmt(r_bar)} y las correlaciones ítem-resto corregidas oscilaron entre "
+        f"{fmt(ir.min())} y {fmt(ir.max())}.",
+        f"Reliability of the {scale} scale ({k} items{inv_en}): internal consistency was {_t(lab, 'en')} according to α (George & Mallery, 2003), "
+        f"Cronbach's α = {fmt(alpha)}, 95% CI [{fmt(a_lo)}, {fmt(a_hi)}] (Feldt et al., 1987), and McDonald's ω = {fmt(omega)}{o_ci_en}. "
+        f"{t_en} The mean inter-item correlation was {fmt(r_bar)} and corrected item-rest correlations ranged from "
+        f"{fmt(ir.min())} to {fmt(ir.max())}."))
+    neg = items_tab.loc[ir < 0, "ítem/item"].tolist()
+    low = items_tab.loc[(ir >= 0) & (ir < .30), "ítem/item"].tolist()
+    if neg:
+        res.notes.append((f"Los ítems {', '.join(neg)} correlacionan negativamente con el resto de la escala: comprueba si son ítems "
+                          "inversos que no se han indicado como tales.",
+                          f"Items {', '.join(neg)} correlate negatively with the rest of the scale: check whether they are reverse-keyed "
+                          "items that were not marked as such."))
+    if low:
+        res.notes.append((f"Los ítems {', '.join(low)} tienen una correlación ítem-resto < .30 (discriminación baja).",
+                          f"Items {', '.join(low)} have an item-rest correlation < .30 (low discrimination)."))
+    gain = items_tab[items_tab["α si se elimina/if deleted"] > alpha + .01]
+    if len(gain):
+        g = gain.sort_values("α si se elimina/if deleted", ascending=False).iloc[0]
+        res.notes.append((f"Eliminar {g['ítem/item']} elevaría α a {fmt(g['α si se elimina/if deleted'])}; decide por criterios de contenido, "
+                          "no solo estadísticos, y sin eliminar ítems de un instrumento validado.",
+                          f"Deleting {g['ítem/item']} would raise α to {fmt(g['α si se elimina/if deleted'])}; decide on content grounds, "
+                          "not only statistical ones, and do not drop items from a validated instrument."))
+    if alpha > .95:
+        res.notes.append(("Un α > .95 puede indicar ítems redundantes (Streiner, 2003).",
+                          "α > .95 may indicate redundant items (Streiner, 2003)."))
+    if np.any(psi < .005):
+        res.notes.append(("Caso Heywood en el modelo de un factor (unicidad ≈ 0): interpreta ω con cautela.",
+                          "Heywood case in the one-factor model (uniqueness ≈ 0): interpret ω with caution."))
+    # item-rest correlation plot
+    fig, ax = plt.subplots(figsize=(6.2, max(2.4, .42 * k + 1)))
+    colors = [PALETTE[0] if v >= .30 else ("#BE123C" if v < 0 else ACCENT) for v in ir]
+    ax.barh(items[::-1], ir.to_numpy()[::-1], color=colors[::-1], height=.6)
+    ax.axvline(.30, color="#475569", lw=1, ls="--")
+    ax.axvline(0, color="#94A3B8", lw=1)
+    ax.set_xlabel("r ítem-resto corregida / corrected item-rest r")
+    ax.set_title(f"{scale}: α = {fmt(alpha)} · ω = {fmt(omega)}")
+    ax.spines[["top", "right"]].set_visible(False)
+    res.figures.append(_save(fig, outdir, "fig_fiabilidad.png"))

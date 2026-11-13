@@ -10,7 +10,7 @@ from .i18n import t
 ALTERNATIVES = ("two-sided", "greater", "less")
 # tests for which a one-sided (directional) alternative is valid
 DIRECTIONAL_TESTS = {"ttest_ind", "mannwhitney", "ttest_paired", "wilcoxon", "pearson", "spearman"}
-ANALYSES = ("compare", "correlation", "regression", "association", "mediation", "moderation")
+ANALYSES = ("compare", "correlation", "regression", "association", "mediation", "moderation", "reliability")
 DESIGNS = ("between", "within", "mixed")
 LEVELS = ("continuous", "ordinal", "nominal")
 
@@ -23,6 +23,8 @@ BENCHMARKS = {
     "f2": {"small": 0.02, "medium": 0.15, "large": 0.35},
     "or": {"small": 1.5, "medium": 2.5, "large": 4.3},  # Chen, Cohen & Chen (2010)
     "path": {"small": 0.14, "medium": 0.39, "large": 0.59},  # Cohen-style standardized paths (Fritz & MacKinnon, 2007)
+    # reliability: planning value of Cronbach's α (tested against `alpha_null`, .70 by default; Bonett, 2002)
+    "rel": {"small": 0.80, "medium": 0.85, "large": 0.90},
 }
 
 
@@ -30,7 +32,7 @@ BENCHMARKS = {
 class Design:
     title: str = ""
     question: str = ""
-    analysis: str = "compare"          # compare / correlation / regression / association / mediation / moderation
+    analysis: str = "compare"          # compare / correlation / regression / association / mediation / moderation / reliability
     design: str = "between"            # between / within / mixed
     n_factors: int = 1                 # 1 or 2 (factorial)
     n_groups: int = 2                  # levels of factor A (groups or conditions)
@@ -49,6 +51,11 @@ class Design:
     moderator_type: str = "continuous"   # continuous / nominal (dichotomous W)
     moderator_levels: list = field(default_factory=list)   # 2 categories of a dichotomous W (0 / 1 order)
     center: bool = True              # moderation: mean-centre continuous X and W before forming X × W
+    items: list = field(default_factory=list)          # reliability: item columns of the scale (dv_name = scale name)
+    reverse_items: list = field(default_factory=list)  # reliability: reverse-keyed items, recoded as min + max − x
+    scale_min: float = 1.0           # reliability: lowest response option (used to reverse items)
+    scale_max: float = 5.0           # reliability: highest response option
+    alpha_null: float = 0.70         # reliability: minimum acceptable α tested in H₀ (Feldt F test; Bonett N)
     covariates: list = field(default_factory=list)
     effect_label: str = "medium"
     effect_size: Optional[float] = None
@@ -95,6 +102,24 @@ class Design:
         self.dv_levels = [str(x).strip() for x in self.dv_levels]
         if not self.predictors:
             self.predictors = ["x1"]
+        self.items = [str(x).strip() for x in self.items if str(x).strip()]
+        self.reverse_items = [str(x).strip() for x in self.reverse_items if str(x).strip()]
+        if self.analysis == "reliability":
+            if not self.items:
+                self.items = [f"item{i + 1}" for i in range(5)]
+            if len(self.items) < 3:
+                raise ValueError("El análisis de fiabilidad necesita al menos 3 ítems / reliability analysis needs at least 3 items")
+            if len(set(self.items)) != len(self.items):
+                raise ValueError("Hay ítems repetidos / duplicated item names")
+            bad = [x for x in self.reverse_items if x not in self.items]
+            if bad:
+                raise ValueError(f"Ítems inversos que no están en la escala / reverse-keyed items not in the scale: {bad}")
+            self.scale_min, self.scale_max = float(self.scale_min), float(self.scale_max)
+            if not self.scale_min < self.scale_max:
+                raise ValueError("El mínimo de la escala de respuesta debe ser menor que el máximo / scale minimum must be below the maximum")
+            self.alpha_null = float(self.alpha_null)
+            if not 0 <= self.alpha_null < 1:
+                raise ValueError("El α mínimo aceptable debe estar en [0, 1) / the minimum acceptable α must be in [0, 1)")
         if self.alternative not in ALTERNATIVES:
             raise ValueError(f"alternative must be one of {ALTERNATIVES}")
         if self.alternative != "two-sided" and recommend(self).test not in DIRECTIONAL_TESTS:
@@ -191,6 +216,22 @@ def recommend(d: Design) -> Recommendation:
             notes.append(("La VD debe ser cuantitativa para esta moderación lineal; con VD dicotómica u ordinal usa una regresión logística con el término X × W.",
                           "The DV must be continuous for this linear moderation; with a dichotomous or ordinal DV use logistic regression with the X × W term."))
         return Recommendation("moderation", None, "f2", [indep, "a_linearity", N, "a_homoscedasticity", "a_multicollinearity"], notes)
+    if d.analysis == "reliability":
+        notes = [("Fiabilidad (consistencia interna) de una escala de varios ítems: α de Cronbach con IC 95% exacto de Feldt et al. (1987) "
+                  f"y prueba F de H₀: α = {_b(d.alpha_null)}; ω total de McDonald (1999) a partir de un modelo de un factor (máxima "
+                  "verosimilitud) con IC 95% bootstrap; correlación ítem-resto corregida y α si se elimina cada ítem."
+                  + (f" Los ítems inversos ({', '.join(d.reverse_items)}) se recodifican como {_g(d.scale_min)} + {_g(d.scale_max)} − x."
+                     if d.reverse_items else ""),
+                  "Internal-consistency reliability of a multi-item scale: Cronbach's α with Feldt et al. (1987) exact 95% CI "
+                  f"and F test of H₀: α = {_b(d.alpha_null)}; McDonald's (1999) ω total from a one-factor model (maximum likelihood) "
+                  "with bootstrap 95% CI; corrected item-rest correlation and α if each item is deleted."
+                  + (f" Reverse-keyed items ({', '.join(d.reverse_items)}) are recoded as {_g(d.scale_min)} + {_g(d.scale_max)} − x."
+                     if d.reverse_items else "")),
+                 ("α asume que todos los ítems miden el constructo con la misma fuerza (tau-equivalencia); si no es así lo infraestima, "
+                  "por eso se informa también ω (McNeish, 2018).",
+                  "α assumes all items measure the construct equally strongly (tau-equivalence); otherwise it underestimates "
+                  "reliability, so ω is reported too (McNeish, 2018).")]
+        return Recommendation("reliability", None, "rel", ["a_independent_obs", "a_unidimensionality"], notes)
     if d.analysis == "correlation":
         if "ordinal" in (d.dv_type, d.iv_type):
             return Recommendation("spearman", None, "r", [indep, "a_linearity"],
@@ -255,6 +296,16 @@ def recommend(d: Design) -> Recommendation:
                             "si son homogéneas, post hoc de Tukey.",
                             "If variances are heterogeneous, Welch's ANOVA with Games-Howell post hoc is used; "
                             "otherwise Tukey post hoc.")])
+
+
+def _g(x):
+    """Compact number for scale bounds (1.0 -> '1', 0.5 -> '0.5')."""
+    return f"{float(x):g}"
+
+
+def _b(x):
+    """Bounded-coefficient APA style: 0.70 -> '.70'."""
+    return f"{float(x):.2f}".replace("0.", ".", 1) if abs(float(x)) < 1 else f"{float(x):.2f}"
 
 
 def assumption_label(key, lang="es"):
