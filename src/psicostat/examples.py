@@ -142,6 +142,25 @@ def example(name: str, seed: int = 42):
         x = np.clip(np.round(3 + 1.1 * z), 1, 5).astype(int)
         x[:, [2, 5]] = 6 - x[:, [2, 5]]          # reverse-keyed items as answered
         df = pd.DataFrame({"id": _ids(n), **{it: x[:, j] for j, it in enumerate(items)}})
+    elif name == "kappa":
+        cats = ["ansiedad", "depresion", "otro"]
+        d = Design(title="Acuerdo diagnóstico entre dos psicólogas", question="¿Coinciden dos psicólogas al clasificar las entrevistas clínicas?",
+                   analysis="agreement", dv_type="nominal", dv_name="diagnostico", dv_levels=cats, raters=["psicologa_a", "psicologa_b"])
+        n = 90
+        true = rng.choice(3, n, p=[.40, .35, .25])
+        r1 = np.where(rng.random(n) < .85, true, rng.choice(3, n))
+        r2 = np.where(rng.random(n) < .80, true, rng.choice(3, n))
+        df = pd.DataFrame({"id": _ids(n), "psicologa_a": [cats[i] for i in r1], "psicologa_b": [cats[i] for i in r2]})
+    elif name == "icc":
+        raters = ["juez1", "juez2", "juez3"]
+        d = Design(title="Fiabilidad interjueces de la escala de habilidades terapéuticas",
+                   question="¿Puntúan de forma concordante tres jueces las grabaciones de sesiones (0–10)?",
+                   analysis="agreement", dv_type="continuous", dv_name="habilidades", raters=raters)
+        n = 40
+        true = rng.normal(6, 1.5, n)
+        bias = np.array([0.0, 0.3, -0.4])
+        x = np.clip(true[:, None] + bias + rng.normal(0, .7, (n, 3)), 0, 10).round(1)
+        df = pd.DataFrame({"id": _ids(n), **{r: x[:, j] for j, r in enumerate(raters)}})
     elif name == "mcnemar":
         d = Design(title="Síntoma presente antes y después", analysis="compare", design="within", dv_type="nominal",
                    n_groups=2, levels=["antes", "despues"], dv_name="insomnio", iv_name="momento")
@@ -155,4 +174,4 @@ def example(name: str, seed: int = 42):
 
 
 EXAMPLES = ["ttest", "mannwhitney", "paired", "anova", "factorial", "ancova", "rm", "mixed", "chi2",
-            "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "reliability", "mcnemar"]
+            "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "reliability", "kappa", "icc", "mcnemar"]

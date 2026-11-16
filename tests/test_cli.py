@@ -52,3 +52,21 @@ def test_cli_reliability_example(tmp_path, capsys):
     assert main(["analyze", str(ex / "diseno.json"), str(ex / "datos.csv"), "--out", str(tmp_path / "res")]) == 0
     out = capsys.readouterr().out
     assert "α de Cronbach" in out and "ω de McDonald" in out
+
+
+def test_wizard_agreement_icc(tmp_path, monkeypatch, capsys):
+    # analysis 8 = agreement; quantitative ratings by 3 judges; H₀ .40 (default), expected ICC medium (.70)
+    answers = iter(["T", "Q", "8", "empatia", "1", "j1,j2,j3", "", "2", "", "", "", ""])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    assert main(["wizard", "--out", str(tmp_path / "w")]) == 0
+    out = capsys.readouterr().out
+    assert "CCI" in out and "N = 26" in out
+    assert open(tmp_path / "w" / "plantilla.csv").readline().strip() == "id,j1,j2,j3"
+
+
+def test_cli_kappa_example(tmp_path, capsys):
+    ex = tmp_path / "ex"
+    assert main(["example", "kappa", "--out", str(ex)]) == 0
+    assert main(["analyze", str(ex / "diseno.json"), str(ex / "datos.csv"), "--out", str(tmp_path / "res")]) == 0
+    out = capsys.readouterr().out
+    assert "κ de Cohen" in out and "Landis y Koch" in out

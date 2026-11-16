@@ -10,7 +10,7 @@ from .i18n import t
 ALTERNATIVES = ("two-sided", "greater", "less")
 # tests for which a one-sided (directional) alternative is valid
 DIRECTIONAL_TESTS = {"ttest_ind", "mannwhitney", "ttest_paired", "wilcoxon", "pearson", "spearman"}
-ANALYSES = ("compare", "correlation", "regression", "association", "mediation", "moderation", "reliability")
+ANALYSES = ("compare", "correlation", "regression", "association", "mediation", "moderation", "reliability", "agreement")
 DESIGNS = ("between", "within", "mixed")
 LEVELS = ("continuous", "ordinal", "nominal")
 
@@ -25,6 +25,8 @@ BENCHMARKS = {
     "path": {"small": 0.14, "medium": 0.39, "large": 0.59},  # Cohen-style standardized paths (Fritz & MacKinnon, 2007)
     # reliability: planning value of Cronbach's α (tested against `alpha_null`, .70 by default; Bonett, 2002)
     "rel": {"small": 0.80, "medium": 0.85, "large": 0.90},
+    # inter-rater agreement: planning value of κ or the ICC (tested against `agree_null`, .40 by default)
+    "agr": {"small": 0.60, "medium": 0.70, "large": 0.80},
 }
 
 
@@ -32,7 +34,7 @@ BENCHMARKS = {
 class Design:
     title: str = ""
     question: str = ""
-    analysis: str = "compare"          # compare / correlation / regression / association / mediation / moderation / reliability
+    analysis: str = "compare"          # compare / correlation / regression / association / mediation / moderation / reliability / agreement
     design: str = "between"            # between / within / mixed
     n_factors: int = 1                 # 1 or 2 (factorial)
     n_groups: int = 2                  # levels of factor A (groups or conditions)
@@ -56,6 +58,8 @@ class Design:
     scale_min: float = 1.0           # reliability: lowest response option (used to reverse items)
     scale_max: float = 5.0           # reliability: highest response option
     alpha_null: float = 0.70         # reliability: minimum acceptable α tested in H₀ (Feldt F test; Bonett N)
+    raters: list = field(default_factory=list)         # agreement: one column per rater (dv_name = what is rated)
+    agree_null: float = 0.40         # agreement: minimum acceptable κ / ICC tested in H₀ (0 = classic test against chance)
     covariates: list = field(default_factory=list)
     effect_label: str = "medium"
     effect_size: Optional[float] = None
@@ -93,7 +97,7 @@ class Design:
             self.levels_b = [f"{pre}{i + 1}" for i in range(int(self.n_levels_b))]
         self.levels_b = [str(x) for x in self.levels_b]
         self.n_levels_b = len(self.levels_b)
-        if self.analysis == "regression" and self.dv_type == "ordinal":
+        if self.analysis in ("regression", "agreement") and self.dv_type == "ordinal":
             # ordered categories of the DV, from lowest to highest (default: a 5-point Likert item)
             if not self.dv_levels or [str(x).strip().lower() for x in self.dv_levels] in (["si", "no"], ["sí", "no"]):
                 self.dv_levels = ["1", "2", "3", "4", "5"]
@@ -120,6 +124,20 @@ class Design:
             self.alpha_null = float(self.alpha_null)
             if not 0 <= self.alpha_null < 1:
                 raise ValueError("El α mínimo aceptable debe estar en [0, 1) / the minimum acceptable α must be in [0, 1)")
+        self.raters = [str(x).strip() for x in self.raters if str(x).strip()]
+        if self.analysis == "agreement":
+            if not self.raters:
+                self.raters = ["evaluador1", "evaluador2"]
+            if len(self.raters) < 2:
+                raise ValueError("El análisis de acuerdo necesita al menos 2 evaluadores / agreement analysis needs at least 2 raters")
+            if len(set(self.raters)) != len(self.raters):
+                raise ValueError("Hay evaluadores repetidos / duplicated rater names")
+            if self.dv_type != "continuous":
+                if len(self.dv_levels) < 2 or len(set(self.dv_levels)) != len(self.dv_levels):
+                    raise ValueError("Indica al menos 2 categorías distintas / give at least 2 distinct categories")
+            self.agree_null = float(self.agree_null)
+            if not 0 <= self.agree_null < 1:
+                raise ValueError("El acuerdo mínimo aceptable debe estar en [0, 1) / the minimum acceptable agreement must be in [0, 1)")
         if self.alternative not in ALTERNATIVES:
             raise ValueError(f"alternative must be one of {ALTERNATIVES}")
         if self.alternative != "two-sided" and recommend(self).test not in DIRECTIONAL_TESTS:
@@ -232,6 +250,33 @@ def recommend(d: Design) -> Recommendation:
                   "α assumes all items measure the construct equally strongly (tau-equivalence); otherwise it underestimates "
                   "reliability, so ω is reported too (McNeish, 2018).")]
         return Recommendation("reliability", None, "rel", ["a_independent_obs", "a_unidimensionality"], notes)
+    if d.analysis == "agreement":
+        h0 = (f"H₀: coeficiente = {_b(d.agree_null)}", f"H₀: coefficient = {_b(d.agree_null)}")
+        ind = "a_independent_raters"
+        if d.dv_type == "continuous":
+            notes = [("Acuerdo entre evaluadores con puntuaciones cuantitativas: coeficiente de correlación intraclase (CCI) de dos factores, "
+                      "acuerdo absoluto y un evaluador, CCI(A,1) (McGraw y Wong, 1996; Koo y Li, 2016), con IC 95% y prueba F de "
+                      f"{h0[0]}; se informan también CCI(C,1) (consistencia) y CCI(A,k) y CCI(C,k) (media de los {len(d.raters)} evaluadores).",
+                      "Inter-rater agreement for quantitative ratings: two-way, absolute-agreement, single-rater intraclass correlation "
+                      "coefficient, ICC(A,1) (McGraw & Wong, 1996; Koo & Li, 2016), with 95% CI and F test of "
+                      f"{h0[1]}; ICC(C,1) (consistency) and ICC(A,k) and ICC(C,k) (mean of the {len(d.raters)} raters) are also reported."),
+                     ("Si en el estudio vas a usar la media de varios evaluadores (y no la puntuación de uno solo), el coeficiente pertinente es CCI(A,k).",
+                      "If the study will use the mean of several raters (rather than a single rater's score), the relevant coefficient is ICC(A,k).")]
+            return Recommendation("icc", None, "agr", ["a_independent_obs", ind, "a_normality"], notes)
+        w = d.dv_type == "ordinal"
+        if len(d.raters) == 2:
+            notes = [(("κ de Cohen ponderada cuadrática (categorías ordenadas; Fleiss y Cohen, 1973)" if w else "κ de Cohen (Cohen, 1960)")
+                      + f" entre {d.raters[0]} y {d.raters[1]}, con EE asintótico e IC 95% (Fleiss, Cohen y Everitt, 1969) y prueba z de {h0[0]}; "
+                      "porcentaje de acuerdo y tabla de contingencia." + (" Se informa también la κ sin ponderar." if w else ""),
+                      ("Quadratic-weighted Cohen's κ (ordered categories; Fleiss & Cohen, 1973)" if w else "Cohen's κ (Cohen, 1960)")
+                      + f" between {d.raters[0]} and {d.raters[1]}, with asymptotic SE and 95% CI (Fleiss, Cohen & Everitt, 1969) and z test of {h0[1]}; "
+                      "percentage agreement and contingency table." + (" Unweighted κ is also reported." if w else ""))]
+            return Recommendation("kappa", None, "agr", ["a_independent_obs", ind], notes)
+        notes = [(f"κ de Fleiss (1971) para {len(d.raters)} evaluadores con IC 95% bootstrap percentil de los sujetos; con H₀: κ = 0, prueba z "
+                  "con el EE de Fleiss, Nee y Landis (1979)." + (" La κ de Fleiss no tiene en cuenta el orden de las categorías." if w else ""),
+                  f"Fleiss' (1971) κ for {len(d.raters)} raters with a percentile bootstrap 95% CI over subjects; with H₀: κ = 0, z test "
+                  "with the Fleiss, Nee & Landis (1979) SE." + (" Fleiss' κ ignores the order of the categories." if w else ""))]
+        return Recommendation("fleiss", None, "agr", ["a_independent_obs", ind], notes)
     if d.analysis == "correlation":
         if "ordinal" in (d.dv_type, d.iv_type):
             return Recommendation("spearman", None, "r", [indep, "a_linearity"],
