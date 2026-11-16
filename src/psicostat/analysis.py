@@ -355,6 +355,10 @@ def analyze(d: Design, data, outdir=None) -> Result:
         numeric_cols = [d.mediator, d.dv_name] + ([] if d.iv_type == "nominal" else [d.iv_name])
     if rec.test == "reliability":
         numeric_cols = list(d.items)
+    if rec.test in ("kappa", "fleiss"):
+        numeric_cols = []
+    if rec.test == "icc":
+        numeric_cols = list(d.raters)
     if rec.test == "moderation":
         numeric_cols = ([d.dv_name] + ([] if d.iv_type == "nominal" else [d.iv_name])
                         + ([] if d.moderator_type == "nominal" else [d.moderator]))
@@ -373,6 +377,7 @@ def analyze(d: Design, data, outdir=None) -> Result:
         "chi2": _chi2, "fisher": _chi2, "mcnemar": _mcnemar, "cochran": _cochran,
         "pearson": _corr, "spearman": _corr, "linreg": _linreg, "logreg": _logreg, "ordreg": _ordreg, "mediation": _mediation,
         "moderation": _moderation, "reliability": _reliability,
+        "kappa": _agreement, "fleiss": _agreement, "icc": _agreement,
     }[rec.test]
     fn(d, df, res, outdir)
     return res
@@ -1635,3 +1640,347 @@ def _reliability(d, df, res, outdir):
     ax.set_title(f"{scale}: α = {fmt(alpha)} · ω = {fmt(omega)}")
     ax.spines[["top", "right"]].set_visible(False)
     res.figures.append(_save(fig, outdir, "fig_fiabilidad.png"))
+
+
+# ------------------------------------------------------------------ inter-rater agreement (Cohen's κ, Fleiss' κ, ICC)
+N_BOOT_FLEISS = 1000
+
+
+def kappa_label(v):
+    """Orientative label for κ (Landis & Koch, 1977)."""
+    if v is None or not np.isfinite(v):
+        return None
+    if v < 0:
+        return "kap_poor"
+    for thr, key in ((.80, "kap_perfect"), (.60, "kap_substantial"), (.40, "kap_moderate"), (.20, "kap_fair")):
+        if v > thr:
+            return key
+    return "kap_slight"
+
+
+def icc_label(v):
+    """Orientative label for an ICC (Koo & Li, 2016)."""
+    if v is None or not np.isfinite(v):
+        return None
+    for thr, key in ((.90, "icc_excellent"), (.75, "icc_good"), (.50, "icc_moderate")):
+        if v > thr:
+            return key
+    return "icc_poor"
+
+
+def agreement_label(test, v):
+    return icc_label(v) if test == "icc" else kappa_label(v)
+
+
+def _cat_label(v):
+    """Category label of a rating as text (1.0 -> '1', ' a ' -> 'a')."""
+    if isinstance(v, (float, np.floating)) and float(v).is_integer():
+        return str(int(v))
+    return str(v).strip()
+
+
+def _ratings(df, raters, cats):
+    R = df[raters].apply(lambda col: col.map(_cat_label))
+    bad = sorted(set(R.to_numpy().ravel()) - set(cats))
+    if bad:
+        raise DataError(f"Valores que no están entre las categorías indicadas ({', '.join(cats)}): {bad} / "
+                        f"values not among the declared categories: {bad}")
+    return R
+
+
+def cohen_kappa(r1, r2, cats, weighted=False):
+    """Cohen's κ (quadratic-weighted if `weighted`) with the asymptotic SE and 95% CI of Fleiss, Cohen & Everitt (1969)
+    and the SE under H₀: κ = 0, via statsmodels (validated against SAS PROC FREQ)."""
+    from statsmodels.stats.inter_rater import cohens_kappa as _ck
+    idx = {c: i for i, c in enumerate(cats)}
+    tab = np.zeros((len(cats), len(cats)))
+    for a, b in zip(r1, r2):
+        tab[idx[a], idx[b]] += 1
+    with np.errstate(invalid="ignore", divide="ignore"):
+        r = _ck(tab, wt="quadratic") if weighted else _ck(tab)
+    return {"kappa": float(r.kappa), "se": float(r.std_kappa), "se0": float(r.std_kappa0),
+            "ci": (float(r.kappa_low), float(r.kappa_upp)), "table": tab}
+
+
+def fleiss_kappa_se0(counts):
+    """Fleiss' κ and its SE under H₀: κ = 0 (Fleiss, Nee & Landis, 1979) from an n × c matrix of category counts."""
+    from statsmodels.stats.inter_rater import fleiss_kappa as _fk
+    counts = np.asarray(counts, float)
+    n, m = counts.shape[0], counts[0].sum()
+    p = counts.sum(axis=0) / (n * m)
+    pq = p * (1 - p)
+    s = pq.sum()
+    se0 = np.sqrt(2) / (s * np.sqrt(n * m * (m - 1))) * np.sqrt(max(s ** 2 - float(np.sum(pq * (1 - 2 * p))), 0))
+    return float(_fk(counts)), float(se0)
+
+
+def icc_two_way(Y, level=0.95):
+    """Two-way ICCs (McGraw & Wong, 1996) of an n subjects × k raters matrix: dict form -> (icc, lo, hi), plus mean squares."""
+    Y = np.asarray(Y, float)
+    n, k = Y.shape
+    gm = Y.mean()
+    ssr = k * np.sum((Y.mean(axis=1) - gm) ** 2)
+    ssc = n * np.sum((Y.mean(axis=0) - gm) ** 2)
+    sse = np.sum((Y - gm) ** 2) - ssr - ssc
+    msr, msc, mse = ssr / (n - 1), ssc / (k - 1), sse / ((n - 1) * (k - 1))
+    q = (1 - level) / 2
+    df1, df2 = n - 1, (n - 1) * (k - 1)
+    a1 = (msr - mse) / (msr + (k - 1) * mse + k * (msc - mse) / n)
+    c1 = (msr - mse) / (msr + (k - 1) * mse)
+    ak = (msr - mse) / (msr + (msc - mse) / n)
+    ck = (msr - mse) / msr
+    # consistency: exact F limits
+    f0 = msr / mse
+    fl, fu = f0 / stats.f.ppf(1 - q, df1, df2), f0 * stats.f.ppf(1 - q, df2, df1)
+    c1_ci = ((fl - 1) / (fl + k - 1), (fu - 1) / (fu + k - 1))
+    ck_ci = (1 - 1 / fl, 1 - 1 / fu)
+    # absolute agreement: Satterthwaite df (McGraw & Wong, 1996, Table 7, case 2A)
+    aa = k * a1 / (n * (1 - a1))
+    bb = 1 + k * a1 * (n - 1) / (n * (1 - a1))
+    v = (aa * msc + bb * mse) ** 2 / ((aa * msc) ** 2 / (k - 1) + (bb * mse) ** 2 / df2)
+    fs, fs2 = stats.f.ppf(1 - q, n - 1, v), stats.f.ppf(1 - q, v, n - 1)
+    den = k * msc + (k * n - k - n) * mse
+    lo = n * (msr - fs * mse) / (fs * den + n * msr)
+    hi = n * (fs2 * msr - mse) / (den + n * fs2 * msr)
+    a1_ci = (lo, hi)
+    ak_ci = (lo * k / (1 + lo * (k - 1)), hi * k / (1 + hi * (k - 1)))
+    return {"A,1": (a1, *a1_ci), "C,1": (c1, *c1_ci), "A,k": (ak, *ak_ci), "C,k": (ck, *ck_ci),
+            "ms": (msr, msc, mse), "n": n, "k": k}
+
+
+def icc_test(form, ms, n, k, rho0):
+    """F test of H₀: ICC = rho0 (McGraw & Wong, 1996, Table 8, two-way model); returns F, df1, df2 and a two-sided p."""
+    msr, msc, mse = ms
+    df1, df2 = n - 1, (n - 1) * (k - 1)
+    if form in ("C,1", "C,k"):
+        f = msr / mse * ((1 - rho0) / (1 + (k - 1) * rho0) if form == "C,1" else (1 - rho0))
+    else:
+        kk = k if form == "A,1" else 1
+        a = kk * rho0 / (n * (1 - rho0))
+        b = 1 + kk * rho0 * (n - 1) / (n * (1 - rho0))
+        f = msr / (a * msc + b * mse)
+        df2 = (a * msc + b * mse) ** 2 / ((a * msc) ** 2 / (k - 1) + (b * mse) ** 2 / ((n - 1) * (k - 1)))
+    p = 2 * min(stats.f.sf(f, df1, df2), stats.f.cdf(f, df1, df2))
+    return float(f), df1, float(df2), float(min(p, 1.0))
+
+
+def _agreement(d, df, res, outdir):
+    from .i18n import t as _t
+    raters, what = list(d.raters), d.dv_name
+    n, k = len(df), len(raters)
+    if n < 10:
+        raise DataError(f"Muy pocos casos evaluados para estimar el acuerdo (N = {n}; mínimo 10) / "
+                        f"too few rated cases to estimate agreement (N = {n}; minimum 10)")
+    fmt = lambda v: E.fmt_num(v, True)  # noqa: E731
+    c0 = fmt(d.agree_null) if d.agree_null else "0"
+    if res.test == "icc":
+        _agreement_icc(d, df, res, outdir, raters, what, n, k, fmt, c0, _t)
+    else:
+        _agreement_kappa(d, df, res, outdir, raters, what, n, k, fmt, c0, _t)
+
+
+def _h0_sentence(coef_es, coef_en, est, null, c0, stat_txt, p, alpha, chance=False):
+    """APA sentence for the test of H₀: coefficient = null (c0 = formatted null; `chance` adds a gloss when null = 0)."""
+    c_es = c0 + (" (acuerdo esperado por azar)" if chance and null == 0 else "")
+    c_en = c0 + (" (chance agreement)" if chance and null == 0 else "")
+    if not np.isfinite(p):
+        return "", ""
+    if p < alpha:
+        hi = est > null
+        return (f"{coef_es} fue significativamente {'superior' if hi else 'inferior'} a {c_es}, {stat_txt}, {E.fmt_p(p)}.",
+                f"{coef_en} was significantly {'higher' if hi else 'lower'} than {c_en}, {stat_txt}, {E.fmt_p(p)}.")
+    return (f"{coef_es} no difirió significativamente de {c_es}, {stat_txt}, {E.fmt_p(p)}.",
+            f"{coef_en} did not differ significantly from {c_en}, {stat_txt}, {E.fmt_p(p)}.")
+
+
+def _agreement_kappa(d, df, res, outdir, raters, what, n, k, fmt, c0, _t):
+    cats = list(d.dv_levels)
+    R = _ratings(df, raters, cats)
+    ordinal = d.dv_type == "ordinal"
+    M = R.to_numpy()
+    unanimous = float(np.mean([len(set(row)) == 1 for row in M]))
+    freq = pd.DataFrame({r: [int((R[r] == c).sum()) for c in cats] for r in raters}, index=cats)
+    freq.insert(0, "categoría/category", cats)
+    res.extra_tables["categories"] = freq.reset_index(drop=True)
+    if res.test == "kappa":
+        main = cohen_kappa(M[:, 0], M[:, 1], cats, weighted=ordinal)
+        unw = cohen_kappa(M[:, 0], M[:, 1], cats) if ordinal else main
+        kap, (lo, hi) = main["kappa"], main["ci"]
+        if d.agree_null == 0:
+            z = kap / main["se0"] if main["se0"] > 0 else np.nan
+        else:
+            z = (kap - d.agree_null) / main["se"] if main["se"] > 0 else np.nan
+        p = float(2 * stats.norm.sf(abs(z))) if np.isfinite(z) else np.nan
+        sym = "κ_w" if ordinal else "κ"
+        lab_es = "κ de Cohen ponderada cuadrática" if ordinal else "κ de Cohen"
+        lab_en = "Quadratic-weighted Cohen's κ" if ordinal else "Cohen's κ"
+        res.rows.append(_row(f"{lab_es} / {lab_en}", "z", None, z, p, sym, kap, (lo, hi), bounded=True))
+        if ordinal:
+            res.rows.append(_row("κ de Cohen sin ponderar / unweighted Cohen's κ", "κ", None, unw["kappa"], None, "κ", unw["kappa"], unw["ci"], bounded=True))
+        ct = pd.DataFrame(main["table"].astype(int), index=cats, columns=cats)
+        ct.insert(0, f"{raters[0]} \\ {raters[1]}", cats)
+        res.extra_tables["crosstab"] = ct.reset_index(drop=True)
+        tab = main["table"]
+        po = float(np.trace(tab) / tab.sum())
+        summary = {"N": n, "k": 2, "% acuerdo/agreement": 100 * po, sym: kap, "EE/SE": main["se"],
+                   "IC95_inf/CI95_low": lo, "IC95_sup/CI95_high": hi}
+        if ordinal:
+            summary["κ (sin ponderar/unweighted)"] = unw["kappa"]
+        res.extra_tables["agreement"] = pd.DataFrame([summary])
+        if d.agree_null == 0:
+            st_es = st_en = f"z = {E.fmt_num(z)}"
+        else:
+            st_es, st_en = f"z = {E.fmt_num(z)} (H₀: κ = {c0})", f"z = {E.fmt_num(z)} (H₀: κ = {c0})"
+        h_es, _ = _h0_sentence(f"La {sym}", f"{sym}", kap, d.agree_null, c0, st_es, p, d.alpha, chance=True)
+        _, h_en = _h0_sentence(f"La {sym}", f"{sym}", kap, d.agree_null, c0, st_en, p, d.alpha, chance=True)
+        lab = kappa_label(kap)
+        res.notes.append((
+            f"Acuerdo entre {raters[0]} y {raters[1]} al clasificar {what} ({len(cats)} categorías{', ordenadas' if ordinal else ''}; N = {n}): "
+            f"los evaluadores coincidieron en el {100 * po:.1f}% de los casos y el acuerdo corregido por azar fue {_t(lab, 'es')} "
+            f"(Landis y Koch, 1977), {lab_es} = {fmt(kap)}, IC 95% [{fmt(lo)}, {fmt(hi)}]"
+            + (f" (κ sin ponderar = {fmt(unw['kappa'])})" if ordinal else "") + f". {h_es}",
+            f"Agreement between {raters[0]} and {raters[1]} when classifying {what} ({len(cats)} {'ordered ' if ordinal else ''}categories; N = {n}): "
+            f"the raters agreed on {100 * po:.1f}% of cases and chance-corrected agreement was {_t(lab, 'en')} "
+            f"(Landis & Koch, 1977), {lab_en} = {fmt(kap)}, 95% CI [{fmt(lo)}, {fmt(hi)}]"
+            + (f" (unweighted κ = {fmt(unw['kappa'])})" if ordinal else "") + f". {h_en}"))
+        if po >= .85 and kap < .60:
+            res.notes.append(("El porcentaje de acuerdo es alto pero κ es baja: ocurre cuando una categoría es muy frecuente o los evaluadores "
+                              "difieren en sus marginales (paradojas de κ; Feinstein y Cicchetti, 1990). Informa ambos valores y la tabla.",
+                              "Percentage agreement is high but κ is low: this happens when one category is very frequent or the raters' "
+                              "marginals differ (κ paradoxes; Feinstein & Cicchetti, 1990). Report both values and the table."))
+        # heatmap of the contingency table
+        fig, ax = plt.subplots(figsize=(1.1 * len(cats) + 2.6, 1.0 * len(cats) + 1.8))
+        ax.imshow(tab, cmap="Greens")
+        ax.grid(False)
+        for i in range(len(cats)):
+            for j in range(len(cats)):
+                ax.text(j, i, int(tab[i, j]), ha="center", va="center", fontsize=10,
+                        color="white" if tab[i, j] > tab.max() / 2 else "#1E293B", fontweight="bold" if i == j else "normal")
+        ax.set_xticks(range(len(cats)), cats)
+        ax.set_yticks(range(len(cats)), cats)
+        ax.set_xlabel(raters[1])
+        ax.set_ylabel(raters[0])
+        ax.set_title(f"{what}: {sym} = {fmt(kap)} · {100 * po:.0f}%")
+        res.figures.append(_save(fig, outdir, "fig_acuerdo.png"))
+        return
+    # Fleiss' κ (3+ raters)
+    counts = np.array([[int((row == c).sum()) for c in cats] for row in M])
+    kap, se0 = fleiss_kappa_se0(counts)
+    rng = np.random.default_rng(0)
+    boots = []
+    with np.errstate(invalid="ignore", divide="ignore"):
+        for _ in range(N_BOOT_FLEISS):
+            kb = fleiss_kappa_se0(counts[rng.integers(0, n, n)])[0]
+            if np.isfinite(kb):
+                boots.append(kb)
+    lo, hi = (float(np.percentile(boots, 2.5)), float(np.percentile(boots, 97.5))) if len(boots) > N_BOOT_FLEISS / 2 else (np.nan, np.nan)
+    if d.agree_null == 0:
+        z = kap / se0 if se0 > 0 else np.nan
+    else:
+        se_b = float(np.std(boots, ddof=1)) if len(boots) > 1 else np.nan
+        z = (kap - d.agree_null) / se_b if se_b and np.isfinite(se_b) and se_b > 0 else np.nan
+    p = float(2 * stats.norm.sf(abs(z))) if np.isfinite(z) else np.nan
+    res.rows.append(_row("κ de Fleiss / Fleiss' κ", "z", None, z, p, "κ", kap, (lo, hi), bounded=True))
+    pairs = float(np.mean(((counts * (counts - 1)).sum(axis=1)) / (k * (k - 1))))
+    res.extra_tables["agreement"] = pd.DataFrame([{"N": n, "k": k, "% unanimidad/unanimous": 100 * unanimous,
+                                                   "% acuerdo por pares/pairwise agreement": 100 * pairs, "κ": kap,
+                                                   "IC95_inf/CI95_low": lo, "IC95_sup/CI95_high": hi}])
+    st_es = f"z = {E.fmt_num(z)}" + ("" if d.agree_null == 0 else f" (H₀: κ = {c0}; EE bootstrap)")
+    st_en = f"z = {E.fmt_num(z)}" + ("" if d.agree_null == 0 else f" (H₀: κ = {c0}; bootstrap SE)")
+    h_es, _ = _h0_sentence("La κ", "κ", kap, d.agree_null, c0, st_es, p, d.alpha, chance=True)
+    _, h_en = _h0_sentence("La κ", "κ", kap, d.agree_null, c0, st_en, p, d.alpha, chance=True)
+    lab = kappa_label(kap)
+    ci_es = f", IC 95% [{fmt(lo)}, {fmt(hi)}] (bootstrap percentil, {N_BOOT_FLEISS} remuestreos)" if np.isfinite(lo) else ""
+    ci_en = f", 95% CI [{fmt(lo)}, {fmt(hi)}] (percentile bootstrap, {N_BOOT_FLEISS} resamples)" if np.isfinite(lo) else ""
+    res.notes.append((
+        f"Acuerdo entre {k} evaluadores al clasificar {what} ({len(cats)} categorías; N = {n}): todos coincidieron en el "
+        f"{100 * unanimous:.1f}% de los casos (acuerdo medio por pares = {100 * pairs:.1f}%) y el acuerdo corregido por azar fue "
+        f"{_t(lab, 'es')} (Landis y Koch, 1977), κ de Fleiss = {fmt(kap)}{ci_es}. {h_es}",
+        f"Agreement among {k} raters when classifying {what} ({len(cats)} categories; N = {n}): all raters agreed on "
+        f"{100 * unanimous:.1f}% of cases (mean pairwise agreement = {100 * pairs:.1f}%) and chance-corrected agreement was "
+        f"{_t(lab, 'en')} (Landis & Koch, 1977), Fleiss' κ = {fmt(kap)}{ci_en}. {h_en}"))
+    if ordinal:
+        res.notes.append(("La κ de Fleiss trata las categorías como nominales; con categorías ordenadas puedes analizar también los "
+                          "pares de evaluadores con κ ponderada o puntuar las categorías y usar el CCI.",
+                          "Fleiss' κ treats categories as nominal; with ordered categories you can also analyse rater pairs with "
+                          "weighted κ or score the categories and use the ICC."))
+    # category use by rater
+    fig, ax = plt.subplots(figsize=(6.4, max(2.6, .45 * k + 1.2)))
+    left = np.zeros(k)
+    for j, c in enumerate(cats):
+        vals = freq[raters].iloc[j].to_numpy(float) / n
+        ax.barh(raters[::-1], vals[::-1], left=left[::-1], color=PALETTE[j % len(PALETTE)], label=c, height=.6)
+        left += vals
+    ax.set_xlim(0, 1)
+    ax.set_xlabel("proporción de casos / share of cases")
+    ax.legend(frameon=False, fontsize=8, ncol=min(len(cats), 5), loc="upper center", bbox_to_anchor=(.5, -.25))
+    ax.set_title(f"{what}: κ = {fmt(kap)}")
+    ax.spines[["top", "right"]].set_visible(False)
+    res.figures.append(_save(fig, outdir, "fig_acuerdo.png"))
+
+
+def _agreement_icc(d, df, res, outdir, raters, what, n, k, fmt, c0, _t):
+    Y = df[raters].to_numpy(float)
+    if np.ptp(Y.mean(axis=1)) == 0:
+        raise DataError("Todos los casos tienen la misma puntuación media: el CCI no está definido / "
+                        "all cases have the same mean score: the ICC is undefined")
+    res.descriptives = _desc({r: Y[:, j] for j, r in enumerate(raters)})
+    out = icc_two_way(Y)
+    ms = out["ms"]
+    a1, lo, hi = out["A,1"]
+    f, df1, df2, p = icc_test("A,1", ms, n, k, d.agree_null)
+    resid = Y - Y.mean(axis=1, keepdims=True) - Y.mean(axis=0, keepdims=True) + Y.mean()
+    w, pw = _shapiro(resid.ravel())
+    res.assumptions.append({"key": "a_normality", "p": pw, "ok": not pw < .05,
+                            "detail": f"residuos / residuals: W = {E.fmt_num(w, True, 3)}, {E.fmt_p(pw)}"})
+    res.rows.append(_row("CCI(A,1) / ICC(A,1)", "F", f"{df1}, {df2:.2f}", f, p, "ICC(A,1)", a1, (lo, hi), bounded=True))
+    rows = []
+    names = {"A,1": ("acuerdo absoluto, un evaluador", "absolute agreement, single rater"),
+             "C,1": ("consistencia, un evaluador", "consistency, single rater"),
+             "A,k": (f"acuerdo absoluto, media de {k}", f"absolute agreement, mean of {k}"),
+             "C,k": (f"consistencia, media de {k}", f"consistency, mean of {k}")}
+    for form in ("A,1", "C,1", "A,k", "C,k"):
+        v, l_, h_ = out[form]
+        ff, d1, d2, pp = icc_test(form, ms, n, k, d.agree_null)
+        rows.append({"forma/form": f"({form})", "tipo/type": f"{names[form][0]} / {names[form][1]}", "CCI/ICC": v,
+                     "IC95_inf/CI95_low": l_, "IC95_sup/CI95_high": h_, "F": ff, "gl1/df1": d1, "gl2/df2": d2, "p": pp})
+    tab = pd.DataFrame(rows)
+    res.extra_tables["icc"] = tab
+    # systematic rater differences (rater bias): F = MSC / MSE
+    fb = ms[1] / ms[2]
+    pb = float(stats.f.sf(fb, k - 1, (n - 1) * (k - 1)))
+    lab = icc_label(a1)
+    st_txt = f"F({df1}, {E.fmt_num(df2)}) = {E.fmt_num(f)}" + ("" if d.agree_null == 0 else f" (H₀: CCI = {c0})")
+    st_en = f"F({df1}, {E.fmt_num(df2)}) = {E.fmt_num(f)}" + ("" if d.agree_null == 0 else f" (H₀: ICC = {c0})")
+    h_es, _ = _h0_sentence("El CCI(A,1)", "ICC(A,1)", a1, d.agree_null, c0, st_txt, p, d.alpha)
+    _, h_en = _h0_sentence("El CCI(A,1)", "ICC(A,1)", a1, d.agree_null, c0, st_en, p, d.alpha)
+    ak, akl, akh = out["A,k"]
+    c1 = out["C,1"][0]
+    res.notes.append((
+        f"Acuerdo entre {k} evaluadores al puntuar {what} (N = {n}): según un CCI de dos factores, acuerdo absoluto y un evaluador, "
+        f"el acuerdo interjueces fue {_t(lab, 'es')} (Koo y Li, 2016), CCI(A,1) = {fmt(a1)}, IC 95% [{fmt(lo)}, {fmt(hi)}]. {h_es} "
+        f"La consistencia fue CCI(C,1) = {fmt(c1)} y, para la media de los {k} evaluadores, CCI(A,{k}) = {fmt(ak)}, IC 95% [{fmt(akl)}, {fmt(akh)}].",
+        f"Agreement among {k} raters when scoring {what} (N = {n}): based on a two-way, absolute-agreement, single-rater ICC, "
+        f"inter-rater reliability was {_t(lab, 'en')} (Koo & Li, 2016), ICC(A,1) = {fmt(a1)}, 95% CI [{fmt(lo)}, {fmt(hi)}]. {h_en} "
+        f"Consistency was ICC(C,1) = {fmt(c1)} and, for the mean of the {k} raters, ICC(A,{k}) = {fmt(ak)}, 95% CI [{fmt(akl)}, {fmt(akh)}]."))
+    if pb < d.alpha:
+        means = ", ".join(f"{r} M = {E.fmt_num(m)}" for r, m in zip(raters, Y.mean(axis=0)))
+        res.notes.append((f"Los evaluadores difirieron sistemáticamente en su nivel medio de puntuación, F({k - 1}, {(n - 1) * (k - 1)}) = "
+                          f"{E.fmt_num(fb)}, {E.fmt_p(pb)} ({means}); por eso el acuerdo absoluto es menor que la consistencia. "
+                          "Revisa los criterios de puntuación o entrena a los evaluadores.",
+                          f"Raters differed systematically in their mean score level, F({k - 1}, {(n - 1) * (k - 1)}) = "
+                          f"{E.fmt_num(fb)}, {E.fmt_p(pb)} ({means}); hence absolute agreement is lower than consistency. "
+                          "Review the scoring criteria or train the raters."))
+    # profile plot: each subject (sorted by mean) with every rater's score
+    order = np.argsort(Y.mean(axis=1))
+    fig, ax = plt.subplots(figsize=(6.6, 3.8))
+    xs = np.arange(1, n + 1)
+    ax.vlines(xs, Y[order].min(axis=1), Y[order].max(axis=1), color="#CBD5E1", lw=1.2)
+    for j, r in enumerate(raters):
+        ax.plot(xs, Y[order, j], "o", ms=4.5, color=PALETTE[j % len(PALETTE)], label=r, alpha=.9)
+    ax.set_xlabel("casos ordenados por la media / cases sorted by mean")
+    ax.set_ylabel(what)
+    ax.set_title(f"{what}: CCI(A,1) = {fmt(a1)}")
+    ax.legend(frameon=False, fontsize=8, ncol=min(k, 4))
+    ax.spines[["top", "right"]].set_visible(False)
+    res.figures.append(_save(fig, outdir, "fig_acuerdo.png"))

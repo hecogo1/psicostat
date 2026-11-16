@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from psicostat import __version__
-from psicostat.analysis import DataError, analyze, reliability_label
+from psicostat.analysis import DataError, agreement_label, analyze, reliability_label
 from psicostat.design import BENCHMARKS, DIRECTIONAL_TESTS, Design, assumption_label, recommend
 from psicostat.effects import fmt_num, fmt_p, magnitude
 from psicostat.examples import EXAMPLES, example
@@ -124,9 +124,9 @@ st.markdown(CSS, unsafe_allow_html=True)
 # --------------------------------------------------------------------------- state
 FIELDS = ["title", "question", "analysis", "design", "dv_type", "iv_type", "dv_name", "iv_name", "levels", "n_factors",
           "factor_b_name", "levels_b", "dv_levels", "covariates", "predictors", "mediator", "moderator", "moderator_type", "moderator_levels", "center",
-          "items", "reverse_items", "scale_min", "scale_max", "alpha_null", "rho", "event_rate",
+          "items", "reverse_items", "scale_min", "scale_max", "alpha_null", "raters", "agree_null", "rho", "event_rate",
           "effect_label", "effect_custom", "alpha", "power", "dropout", "decimal_comma", "alternative"]
-LISTS = {"levels", "levels_b", "dv_levels", "covariates", "predictors", "moderator_levels", "items", "reverse_items"}
+LISTS = {"levels", "levels_b", "dv_levels", "covariates", "predictors", "moderator_levels", "items", "reverse_items", "raters"}
 
 
 def _load_design(d: Design):
@@ -199,6 +199,10 @@ def current_design():
     elif a == "reliability":
         kw.update(dv_name=g["dv_name"], items=lst(g["items"]), reverse_items=lst(g["reverse_items"]),
                   scale_min=float(g["scale_min"]), scale_max=float(g["scale_max"]), alpha_null=float(g["alpha_null"]))
+    elif a == "agreement":
+        kw.update(dv_type=g["dv_type"], dv_name=g["dv_name"], raters=lst(g["raters"]), agree_null=float(g["agree_null"]))
+        if g["dv_type"] != "continuous":
+            kw["dv_levels"] = lst(g["dv_levels"])
     else:
         kw.update(dv_type=g["dv_type"], iv_type=g["iv_type"], dv_name=g["dv_name"])
         if a == "correlation":
@@ -342,18 +346,20 @@ with main:
             c1, c2 = st.columns(2)
             c1.text_input(t("q_title", lang), key="k_title", placeholder=L("p. ej., Mindfulness y estrés académico", "e.g., Mindfulness and academic stress"))
             c2.text_input(t("q_question", lang), key="k_question", placeholder=L("¿Reduce X la variable Y?", "Does X reduce Y?"))
-            st.radio(t("q_analysis", lang), ["compare", "correlation", "regression", "association", "mediation", "moderation", "reliability"], key="k_analysis",
+            st.radio(t("q_analysis", lang), ["compare", "correlation", "regression", "association", "mediation", "moderation", "reliability", "agreement"], key="k_analysis",
                      format_func=lambda a: t("an_" + a, lang),
                      help=L("Comparar: diferencias entre grupos o momentos. Correlación: si dos variables varían juntas. "
                             "Regresión: predecir una variable a partir de otras. Asociación: relación entre dos variables de categorías. "
                             "Mediación: si X influye en Y a través de un mediador M (efecto indirecto). "
                             "Moderación: si el efecto de X sobre Y cambia según una tercera variable W (interacción). "
-                            "Fiabilidad: si los ítems de una escala o cuestionario miden de forma consistente (α de Cronbach y ω de McDonald).",
+                            "Fiabilidad: si los ítems de una escala o cuestionario miden de forma consistente (α de Cronbach y ω de McDonald). "
+                            "Acuerdo: si dos o más evaluadores o jueces puntúan o clasifican igual a los mismos casos (κ de Cohen o de Fleiss y CCI).",
                             "Compare: differences between groups or time points. Correlation: whether two variables vary together. "
                             "Regression: predict one variable from others. Association: relation between two categorical variables. "
                             "Mediation: whether X affects Y through a mediator M (indirect effect). "
                             "Moderation: whether the effect of X on Y changes with a third variable W (interaction). "
-                            "Reliability: whether the items of a scale or questionnaire measure consistently (Cronbach's α and McDonald's ω)."))
+                            "Reliability: whether the items of a scale or questionnaire measure consistently (Cronbach's α and McDonald's ω). "
+                            "Agreement: whether two or more raters or judges score or classify the same cases alike (Cohen's or Fleiss' κ and ICC)."))
             if ss.k_analysis == "compare":
                 st.radio(t("q_design", lang), ["between", "within", "mixed"], key="k_design", format_func=lambda x: t("d_" + x, lang),
                          help=L("Entre sujetos: cada persona está en un solo grupo. Intra sujetos: las mismas personas se miden varias veces. "
@@ -452,6 +458,28 @@ with main:
                 c3.number_input(t("q_scale_max", lang), step=1.0, key="k_scale_max", help=L("La opción de respuesta más alta (p. ej., 5).", "The highest response option (e.g., 5)."))
                 st.caption(L("Fiabilidad: α de Cronbach (IC de Feldt), ω de McDonald (modelo de un factor), correlación ítem-resto y α si se elimina el ítem.",
                              "Reliability: Cronbach's α (Feldt CI), McDonald's ω (one-factor model), item-rest correlation and α if item deleted."))
+            elif a == "agreement":
+                if len(lst(ss.get("k_raters", ""))) < 2:
+                    ss.k_raters = "evaluador1, evaluador2"
+                c1.text_input(t("q_rated_name", lang), key="k_dv_name",
+                              help=L("Lo que puntúan o clasifican los evaluadores (p. ej., diagnostico, empatia).",
+                                     "What the raters score or classify (e.g., diagnosis, empathy)."))
+                c2.selectbox(t("q_rating_type", lang), TYPES, key="k_dv_type", format_func=lambda x: t("t_" + x, lang),
+                             help=L("Puntuación cuantitativa (p. ej., 0–10) → CCI. Categorías → κ de Cohen (2 evaluadores) o de Fleiss (3 o más); "
+                                    "si las categorías tienen orden, κ ponderada.",
+                                    "Quantitative score (e.g., 0–10) → ICC. Categories → Cohen's κ (2 raters) or Fleiss' κ (3 or more); "
+                                    "weighted κ if the categories are ordered."))
+                if ss.k_dv_type != "continuous":
+                    if ss.k_dv_type == "ordinal" and [x.lower() for x in lst(ss.get("k_dv_levels", ""))] in ([], ["si", "no"], ["sí", "no"]):
+                        ss.k_dv_levels = "1, 2, 3, 4, 5"
+                    c3.text_input(t("q_categories", lang), key="k_dv_levels",
+                                  help=L("Todas las categorías que pueden asignar los evaluadores, tal como aparecerán en el CSV.",
+                                         "All categories the raters can assign, exactly as they will appear in the CSV."))
+                st.text_input(t("q_raters", lang), key="k_raters",
+                              help=L("Una columna por evaluador en el CSV y una fila por caso evaluado (participante, entrevista, vídeo…).",
+                                     "One CSV column per rater and one row per rated case (participant, interview, video…)."))
+                st.caption(L("Acuerdo entre evaluadores: κ de Cohen (ponderada si las categorías son ordinales), κ de Fleiss con 3+ evaluadores, o CCI con puntuaciones cuantitativas.",
+                             "Inter-rater agreement: Cohen's κ (weighted for ordinal categories), Fleiss' κ with 3+ raters, or ICC for quantitative scores."))
             else:
                 c1.selectbox(t("q_dv_type", lang), TYPES, key="k_dv_type", format_func=lambda x: t("t_" + x, lang), help=tip_type)
                 c2.selectbox(t("q_iv_type", lang), TYPES, key="k_iv_type", format_func=lambda x: t("t_" + x, lang), help=tip_type)
@@ -480,6 +508,13 @@ with main:
                                         "El tamaño muestral se calcula para demostrar que supera el α mínimo aceptable.",
                                         "The α you expect in your sample (e.g., the published value for the scale; be conservative). "
                                         "Sample size is computed to show it exceeds the minimum acceptable α."))
+            elif ss.k_analysis == "agreement":
+                c1.select_slider(L("Acuerdo esperado (κ o CCI)", "Expected agreement (κ or ICC)"), ["small", "medium", "large"], key="k_effect_label",
+                                 format_func=lambda x: fmt_num(BENCHMARKS["agr"][x], True),
+                                 help=L("El κ o CCI que esperas (p. ej., el de un estudio piloto o publicado; sé conservador). "
+                                        "El tamaño muestral se calcula para demostrar que supera el acuerdo mínimo aceptable.",
+                                        "The κ or ICC you expect (e.g., from a pilot or published study; be conservative). "
+                                        "Sample size is computed to show it exceeds the minimum acceptable agreement."))
             else:
                 c1.select_slider(t("q_effect_label", lang), ["small", "medium", "large"], key="k_effect_label", format_func=lambda x: t(x, lang),
                                  help=t("effect_help", lang))
@@ -490,6 +525,12 @@ with main:
                 st.number_input(t("q_alpha_null", lang), 0.0, 0.95, step=0.05, key="k_alpha_null",
                                 help=L("Valor por debajo del cual la fiabilidad no te parecería suficiente (por convención, .70 para investigación).",
                                        "Value below which reliability would not be good enough for you (conventionally .70 for research)."))
+            if ss.k_analysis == "agreement":
+                st.number_input(t("q_agree_null", lang), 0.0, 0.95, step=0.05, key="k_agree_null",
+                                help=L("Valor por debajo del cual el acuerdo no te parecería suficiente (p. ej., .40). Con 0 se contrasta solo "
+                                       "que el acuerdo supera al azar, algo casi siempre trivial (Sim y Wright, 2005).",
+                                       "Value below which agreement would not be good enough for you (e.g., .40). With 0 you only test that "
+                                       "agreement beats chance, which is almost always trivial (Sim & Wright, 2005)."))
             c1, c2, c3 = st.columns(3)
             c1.number_input(t("q_alpha", lang), 0.001, 0.2, step=0.005, format="%.3f", key="k_alpha",
                             help=L("Riesgo aceptado de un falso positivo. Por convención, .05.", "Accepted risk of a false positive. Conventionally .05."))
@@ -512,13 +553,16 @@ with main:
                 st.error(design_error)
             else:
                 rec, ssz = recommend(design), sample_size(design)
-                fam = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR", "path": "a = b", "rel": "α"}.get(ssz["family"], ssz["family"])
+                fam = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR", "path": "a = b", "rel": "α", "agr": "κ/CCI"}.get(ssz["family"], ssz["family"])
                 rel = ssz["family"] == "rel"
+                agr = ssz["family"] == "agr"
                 cards([
                     (L("Prueba recomendada", "Recommended test"), cap(rec.label(lang).split(" (")[0]), L("Alternativa: ", "Fallback: ") + rec.fallback_label(lang), ""),
                     (L("Tamaño muestral", "Sample size"), f"N = {ssz['n_total']}",
                      (f"{ssz['n_per_group']} {t('per_group', lang)}" if ssz["n_per_group"] and ssz["groups"] > 1 else L("participantes", "participants")), "indigo"),
                     ((L("α esperado", "Expected α"), f"α = {fmt_num(ssz['effect'], True)}", f"H₀: α = {fmt_num(design.alpha_null, True)}", "amber") if rel else
+                     (L("Acuerdo esperado", "Expected agreement"), f"{'ICC' if rec.test == 'icc' else 'κ'} = {fmt_num(ssz['effect'], True)}",
+                      f"H₀: {'ICC' if rec.test == 'icc' else 'κ'} = {fmt_num(design.agree_null, True)}", "amber") if agr else
                      (L("Efecto a detectar", "Effect to detect"), f"{fam} = {ssz['effect']:.2f}", t(ssz["effect_label"], lang) if ssz["effect_label"] != "custom" else L("valor propio", "custom value"), "amber")),
                     ("α · " + L("potencia", "power"), f"{fmt_num(design.alpha, True)} · {fmt_num(design.power, True)}",
                      (L("unilateral", "one-sided") if ssz.get("one_sided") else L("bilateral", "two-sided")), "rose"),
@@ -594,6 +638,20 @@ with main:
                                 ("N", res.n, (L(f"{res.n_excluded} casos excluidos", f"{res.n_excluded} cases excluded") if res.n_excluded else L("sin exclusiones", "no exclusions")), "indigo"),
                                 (L("α de Cronbach", "Cronbach's α"), dc(fmt_num(r0["es"], True)), _ci(r0) + (f" · {t(lab_a, lang)}" if lab_a else ""), "amber"),
                                 (L("ω de McDonald", "McDonald's ω"), dc(fmt_num(r1["es"], True)), _ci(r1), "rose"),
+                            ])
+                        elif res.test in ("kappa", "fleiss", "icc"):
+                            lab_k = agreement_label(res.test, r0["es"])
+                            ci_ok = r0["ci"] and all(np.isfinite(r0["ci"]))
+                            cards([
+                                (L("Análisis", "Analysis"), L("Acuerdo entre evaluadores", "Inter-rater agreement"),
+                                 f"{len(design.raters)} {L('evaluadores', 'raters')} · {design.dv_name}", ""),
+                                ("N", res.n, (L(f"{res.n_excluded} casos excluidos", f"{res.n_excluded} cases excluded") if res.n_excluded else L("casos evaluados", "rated cases")), "indigo"),
+                                ({"kappa": L("κ de Cohen", "Cohen's κ") + (L(" ponderada", " (weighted)") if design.dv_type == "ordinal" else ""),
+                                  "fleiss": L("κ de Fleiss", "Fleiss' κ"), "icc": "CCI(A,1)" if lang == "es" else "ICC(A,1)"}[res.test],
+                                 dc(fmt_num(r0["es"], True)),
+                                 (ci_txt if ci_ok else "") + (f" · {t(lab_k, lang)}" if lab_k else ""), "amber"),
+                                (r0["label"].split(" / ")[0] if lang == "es" else r0["label"].split(" / ")[-1], dc(fmt_p(r0["p"])),
+                                 dc(f"H₀ = {fmt_num(design.agree_null, True)}"), "rose"),
                             ])
                         else:
                             cards([

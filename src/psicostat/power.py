@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 from scipy import stats
 from statsmodels.stats.power import TTestIndPower, TTestPower
 
@@ -186,6 +187,22 @@ def sample_size(d: Design, rec=None) -> dict:
                   f"de {_b(es)} con {len(d.items)} ítems",
                   f"reliability, Bonett (2002) formula to test H₀: α = {_b(d.alpha_null)} against an expected Cronbach's α "
                   f"of {_b(es)} with {len(d.items)} items")
+    elif test == "icc":
+        k = len(d.raters)
+        n_total = icc_n(k, d.agree_null, es, a, pw)
+        npg = None
+        method = (f"acuerdo entre evaluadores, potencia exacta de la prueba F del CCI para contrastar H₀: CCI = {_b(d.agree_null)} "
+                  f"frente a un CCI esperado de {_b(es)} con {k} evaluadores",
+                  f"inter-rater agreement, exact power of the ICC F test of H₀: ICC = {_b(d.agree_null)} "
+                  f"against an expected ICC of {_b(es)} with {k} raters")
+    elif test in ("kappa", "fleiss"):
+        c = len(d.dv_levels)
+        n_total = kappa_n(c, d.agree_null, es, a, pw)
+        npg = None
+        method = (f"acuerdo entre evaluadores, prueba z de la κ de Cohen (varianza asintótica de Fleiss, Cohen y Everitt, 1969) para "
+                  f"contrastar H₀: κ = {_b(d.agree_null)} frente a una κ esperada de {_b(es)} con {c} categorías equiprobables",
+                  f"inter-rater agreement, z test of Cohen's κ (Fleiss, Cohen & Everitt, 1969 asymptotic variance) of "
+                  f"H₀: κ = {_b(d.agree_null)} against an expected κ of {_b(es)} with {c} equally likely categories")
     else:  # pragma: no cover
         raise ValueError(test)
 
@@ -220,6 +237,18 @@ def sample_size(d: Design, rec=None) -> dict:
                       "paralelos y normalidad). Para validar la estructura de un cuestionario nuevo con análisis factorial se suelen necesitar más participantes.",
                       "Bonett's formula approximates Feldt's exact F test (off by at most 1 case; it assumes parallel items and normality). "
                       "Validating the structure of a new questionnaire with factor analysis usually needs more participants."))
+    if test == "icc":
+        notes.append(("Se supone que los evaluadores no difieren sistemáticamente (sin sesgo de evaluador) y normalidad; si esperas "
+                      "diferencias entre evaluadores, el CCI de acuerdo absoluto será menor y conviene aumentar N.",
+                      "Raters are assumed not to differ systematically (no rater bias) and normality; if you expect differences "
+                      "between raters, the absolute-agreement ICC will be lower and N should be increased."))
+    if test in ("kappa", "fleiss"):
+        notes.append(("El cálculo supone categorías igual de frecuentes; si una categoría es muy rara, κ es menos precisa y se necesitan más casos."
+                      + (" Se calcula para la κ sin ponderar." if d.dv_type == "ordinal" and test == "kappa" else "")
+                      + (f" Se calcula para dos evaluadores, lo que es conservador con {len(d.raters)}." if test == "fleiss" else ""),
+                      "The computation assumes equally frequent categories; if a category is very rare, κ is less precise and more cases are needed."
+                      + (" It is computed for unweighted κ." if d.dv_type == "ordinal" and test == "kappa" else "")
+                      + (f" It is computed for two raters, which is conservative with {len(d.raters)}." if test == "fleiss" else "")))
     n_before = n_total
     if d.dropout and d.dropout > 0:
         if npg:
@@ -254,10 +283,68 @@ def bonett_alpha_n(k, alpha0, alpha1, a=0.05, power=0.80, two_sided=True):
     return math.ceil(2 * k / (k - 1) * (za + zb) ** 2 / math.log(delta) ** 2 + 2)
 
 
+def icc_power(n, k, rho0, rho1, a=0.05):
+    """Exact power of the two-sided F test of H₀: ICC = rho0 when ICC = rho1 (normal two-way model without rater bias).
+
+    F₀ = (MSR / MSE) · (1 − ρ₀) / (1 + (k − 1)ρ₀) is distributed as c · F(n − 1, (n − 1)(k − 1)) with
+    c = [(1 + (k − 1)ρ₁) / (1 − ρ₁)] · [(1 − ρ₀) / (1 + (k − 1)ρ₀)] (Shrout & Fleiss, 1979; Walter, Eliasziw & Donner, 1998).
+    """
+    df1, df2 = n - 1, (n - 1) * (k - 1)
+    c = (1 + (k - 1) * rho1) / (1 - rho1) * (1 - rho0) / (1 + (k - 1) * rho0)
+    hi, lo = stats.f.ppf(1 - a / 2, df1, df2), stats.f.ppf(a / 2, df1, df2)
+    return float(stats.f.sf(hi / c, df1, df2) + stats.f.cdf(lo / c, df1, df2))
+
+
+def icc_n(k, rho0, rho1, a=0.05, power=0.80):
+    """Smallest number of rated subjects for the exact ICC F test (see `icc_power`)."""
+    if k < 2:
+        raise ValueError("Se necesitan al menos 2 evaluadores / at least 2 raters are needed")
+    if not (0 <= rho0 < 1 and 0 < rho1 < 1) or rho1 == rho0:
+        raise ValueError("El CCI esperado debe estar entre 0 y 1 y ser distinto del mínimo (H₀) / "
+                         "the expected ICC must be in (0, 1) and differ from the minimum (H₀)")
+    return _min_n(lambda n: icc_power(n, k, rho0, rho1, a), power, 3)
+
+
+def kappa_table(c, kappa):
+    """Expected c × c probability table for two raters with equal, uniform marginals and Cohen's κ = kappa."""
+    p = 1 / c
+    return (1 - kappa) * p * p * (1 - np.eye(c)) + np.eye(c) * (p * p + kappa * p * (1 - p))
+
+
+def kappa_avar(P):
+    """Per-observation asymptotic variance of Cohen's κ̂ for a population probability table P (Fleiss, Cohen & Everitt, 1969)."""
+    P = np.asarray(P, float) / np.sum(P)
+    r, s = P.sum(axis=1), P.sum(axis=0)
+    pe = float(r @ s)
+    kap = (np.trace(P) - pe) / (1 - pe)
+    A = float(np.sum(np.diag(P) * (1 - (r + s) * (1 - kap)) ** 2))
+    W = (s[:, None] + r[None, :]) ** 2          # (p.i + pj.)² for cell (i, j)
+    B = float((1 - kap) ** 2 * np.sum((P * W)[~np.eye(len(P), dtype=bool)]))
+    C = (kap - pe * (1 - kap)) ** 2
+    return (A + B - C) / (1 - pe) ** 2
+
+
+def kappa_n(c, kappa0, kappa1, a=0.05, power=0.80):
+    """N to reject H₀: κ = kappa0 (two-sided z test) when κ = kappa1, with c equally likely categories.
+
+    n = [(z_{a/2} σ₀ + z_β σ₁) / (κ₁ − κ₀)]² (Cantor, 1996), with σ₀² and σ₁² the per-observation asymptotic variances of κ̂
+    at κ₀ and κ₁ (Fleiss, Cohen & Everitt, 1969). Using σ₀ for the critical value keeps the Wald test used in the analysis
+    at or above the nominal power in small samples (checked by simulation in the tests), where the pure Wald formula falls short.
+    """
+    if c < 2:
+        raise ValueError("Se necesitan al menos 2 categorías / at least 2 categories are needed")
+    lo = -1 / (c - 1)
+    if not (lo < kappa0 < 1 and lo < kappa1 < 1) or kappa1 == kappa0:
+        raise ValueError("La κ esperada debe ser < 1 y distinta de la κ mínima (H₀) / the expected κ must be < 1 and differ from the minimum κ (H₀)")
+    s0, s1 = math.sqrt(kappa_avar(kappa_table(c, kappa0))), math.sqrt(kappa_avar(kappa_table(c, kappa1)))
+    za, zb = stats.norm.ppf(1 - a / 2), stats.norm.ppf(power)
+    return max(math.ceil(((za * s0 + zb * s1) / (kappa1 - kappa0)) ** 2), 10)
+
+
 def explain(ss: dict, lang="es") -> str:
-    sym = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR", "path": "a=b", "rel": "α"}[ss["family"]]
+    sym = {"d": "d", "f": "f", "r": "r", "w": "w", "f2": "f²", "or": "OR", "path": "a=b", "rel": "α", "agr": "κ/CCI"}[ss["family"]]
     i = 0 if lang == "es" else 1
-    if ss["family"] == "rel":
+    if ss["family"] in ("rel", "agr"):
         if lang == "es":
             txt = (f"Tamaño muestral a priori ({ss['method'][i]}): con un nivel de significación de {_b(ss['alpha'])} y potencia = "
                    f"{_b(ss['power'])} se necesitan N = {ss['n_total']} participantes")

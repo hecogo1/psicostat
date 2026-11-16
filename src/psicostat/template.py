@@ -45,6 +45,12 @@ def columns(d: Design):
             cols.append((it, f"Ítem {i} de la escala {d.dv_name}" + (" (inverso: se recodifica automáticamente)" if inv else ""),
                          f"Item {i} of the {d.dv_name} scale" + (" (reverse-keyed: recoded automatically)" if inv else ""),
                          "ordinal", rng))
+    elif rec.test in ("kappa", "fleiss", "icc"):
+        cat = rec.test != "icc"
+        for i, r in enumerate(d.raters, 1):
+            cols.append((r, f"Evaluador {i}: {'categoría asignada' if cat else 'puntuación'} de {d.dv_name}",
+                         f"Rater {i}: {'assigned category' if cat else 'score'} of {d.dv_name}",
+                         d.dv_type, ", ".join(d.dv_levels) if cat else ""))
     elif rec.test in ("linreg", "logreg", "ordreg"):
         for p in d.predictors:
             cols.append((p, "Predictor", "Predictor", d.iv_type,
@@ -93,7 +99,8 @@ def make_template(d: Design, n: int = 20):
     df = pd.DataFrame({c: [""] * n for c in names})
     df["id"] = [f"P{i + 1:03d}" for i in range(n)]
     rec = recommend(d)
-    if d.design in ("between", "mixed") and rec.test not in ("chi2", "fisher", "pearson", "spearman", "linreg", "logreg", "ordreg", "mediation", "moderation", "reliability"):
+    if d.design in ("between", "mixed") and rec.test not in ("chi2", "fisher", "pearson", "spearman", "linreg", "logreg", "ordreg", "mediation", "moderation", "reliability",
+                                                            "kappa", "fleiss", "icc"):
         if d.n_factors == 2 and d.design == "between":
             cells = [(a, b) for a in d.levels for b in d.levels_b]
             df[d.iv_name] = [cells[i % len(cells)][0] for i in range(n)]

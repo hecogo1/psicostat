@@ -131,3 +131,34 @@ def test_switch_to_reliability_fills_default_items():
     assert at.text_input(key="k_items").value == "item1, item2, item3, item4, item5"
     at.button(key="nav_3").click().run()
     assert not at.exception
+
+
+def test_agreement_icc_in_ui():
+    at = _app()
+    at.selectbox(key="k_example").set_value("icc").run()
+    at.button(key="nav_1").click().run()
+    assert not at.exception
+    assert at.text_input(key="k_raters").value == "juez1, juez2, juez3"
+    at.button(key="nav_3").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "H₀: ICC = .40" in html and "N = " in html
+    at.button(key="nav_5").click().run()
+    at.button(key="run").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "CCI(A,1)" in html and "Koo y Li" in html
+
+
+def test_agreement_kappa_from_scratch():
+    at = _app()
+    at.radio(key="k_analysis").set_value("agreement").run()
+    at.button(key="nav_1").click().run()
+    assert not at.exception
+    assert at.text_input(key="k_raters").value == "evaluador1, evaluador2"
+    at.selectbox(key="k_dv_type").set_value("nominal").run()
+    at.text_input(key="k_dv_levels").set_value("a, b, c").run()
+    at.button(key="nav_3").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "H₀: κ = .40" in html and "Cohen" in html

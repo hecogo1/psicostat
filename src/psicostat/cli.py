@@ -48,7 +48,8 @@ def wizard(lang="es"):
     print(t("step1", lang))
     title = _ask(t("q_title", lang), "")
     question = _ask(t("q_question", lang), "")
-    analysis = _ask(t("q_analysis", lang), 1, [(a, t("an_" + a, lang)) for a in ("compare", "correlation", "regression", "association", "mediation", "moderation", "reliability")])
+    analysis = _ask(t("q_analysis", lang), 1, [(a, t("an_" + a, lang)) for a in ("compare", "correlation", "regression", "association", "mediation",
+                                                                                "moderation", "reliability", "agreement")])
     kw = dict(title=title, question=question, analysis=analysis)
     print("\n" + t("step2", lang))
     if analysis == "compare":
@@ -98,6 +99,12 @@ def wizard(lang="es"):
         kw["reverse_items"] = _list(_ask(t("q_reverse_items", lang), ""))
         kw["scale_min"] = _ask(t("q_scale_min", lang), 1, cast=float)
         kw["scale_max"] = _ask(t("q_scale_max", lang), 5, cast=float)
+    elif analysis == "agreement":
+        kw["dv_name"] = _ask(t("q_rated_name", lang), "diagnostico")
+        kw["dv_type"] = _ask(t("q_rating_type", lang), 3, [(x, t("t_" + x, lang)) for x in ("continuous", "ordinal", "nominal")])
+        if kw["dv_type"] != "continuous":
+            kw["dv_levels"] = _list(_ask(t("q_categories", lang), "1,2,3,4,5" if kw["dv_type"] == "ordinal" else "a,b,c"))
+        kw["raters"] = _list(_ask(t("q_raters", lang), "evaluador1,evaluador2"))
     else:
         kw["dv_type"] = _ask(t("q_dv_type", lang), 1, [(x, t("t_" + x, lang)) for x in ("continuous", "ordinal", "nominal")])
         kw["iv_type"] = _ask(t("q_iv_type", lang), 1, [(x, t("t_" + x, lang)) for x in ("continuous", "ordinal", "nominal")])
@@ -118,6 +125,11 @@ def wizard(lang="es"):
         rel = BENCHMARKS["rel"]
         kw["effect_label"] = _ask(("α de Cronbach esperado" if lang == "es" else "Expected Cronbach's α"), 2,
                                   [(x, f"α = {rel[x]:.2f}") for x in ("small", "medium", "large")])
+    elif analysis == "agreement":
+        kw["agree_null"] = _ask(t("q_agree_null", lang), 0.40, cast=float)
+        agr = BENCHMARKS["agr"]
+        kw["effect_label"] = _ask(("Acuerdo esperado (κ o CCI)" if lang == "es" else "Expected agreement (κ or ICC)"), 2,
+                                  [(x, f"{agr[x]:.2f}") for x in ("small", "medium", "large")])
     else:
         kw["effect_label"] = _ask(t("q_effect_label", lang), 2, [(x, t(x, lang)) for x in ("small", "medium", "large")])
     custom = _ask(t("q_effect_custom", lang), "")
