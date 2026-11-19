@@ -39,6 +39,7 @@ def test_larger_effect_needs_fewer():
     dict(analysis="mediation", iv_type="continuous", mediator="m"),
     dict(analysis="moderation", iv_type="continuous", moderator="w"),
     dict(analysis="reliability", items=["i1", "i2", "i3", "i4"]),
+    dict(analysis="multilevel", predictors=["x1", "x2"], cluster="clase", random_slope="x1"),
     dict(analysis="agreement", dv_type="nominal"), dict(analysis="agreement", dv_type="continuous", raters=["a", "b", "c"]),
 ])
 def test_all_designs_have_n(kw):

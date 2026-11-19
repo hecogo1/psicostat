@@ -49,7 +49,7 @@ def wizard(lang="es"):
     title = _ask(t("q_title", lang), "")
     question = _ask(t("q_question", lang), "")
     analysis = _ask(t("q_analysis", lang), 1, [(a, t("an_" + a, lang)) for a in ("compare", "correlation", "regression", "association", "mediation",
-                                                                                "moderation", "reliability", "agreement")])
+                                                                                "moderation", "reliability", "agreement", "multilevel")])
     kw = dict(title=title, question=question, analysis=analysis)
     print("\n" + t("step2", lang))
     if analysis == "compare":
@@ -105,6 +105,11 @@ def wizard(lang="es"):
         if kw["dv_type"] != "continuous":
             kw["dv_levels"] = _list(_ask(t("q_categories", lang), "1,2,3,4,5" if kw["dv_type"] == "ordinal" else "a,b,c"))
         kw["raters"] = _list(_ask(t("q_raters", lang), "evaluador1,evaluador2"))
+    elif analysis == "multilevel":
+        kw["dv_name"] = _ask(t("q_dv_name", lang), "y")
+        kw["cluster"] = _ask(t("q_cluster", lang), "clase")
+        kw["predictors"] = _list(_ask(t("q_predictors", lang), "x1,x2"))
+        kw["random_slope"] = _ask(t("q_random_slope", lang), "")
     else:
         kw["dv_type"] = _ask(t("q_dv_type", lang), 1, [(x, t("t_" + x, lang)) for x in ("continuous", "ordinal", "nominal")])
         kw["iv_type"] = _ask(t("q_iv_type", lang), 1, [(x, t("t_" + x, lang)) for x in ("continuous", "ordinal", "nominal")])
@@ -131,6 +136,9 @@ def wizard(lang="es"):
         kw["effect_label"] = _ask(("Acuerdo esperado (κ o CCI)" if lang == "es" else "Expected agreement (κ or ICC)"), 2,
                                   [(x, f"{agr[x]:.2f}") for x in ("small", "medium", "large")])
     else:
+        if analysis == "multilevel":
+            kw["cluster_size"] = _ask(t("q_cluster_size", lang), 20, cast=int)
+            kw["icc_plan"] = _ask(t("q_icc_plan", lang), 0.10, cast=float)
         kw["effect_label"] = _ask(t("q_effect_label", lang), 2, [(x, t(x, lang)) for x in ("small", "medium", "large")])
     custom = _ask(t("q_effect_custom", lang), "")
     kw["effect_size"] = float(custom) if custom else None
@@ -169,8 +177,11 @@ def print_plan(d: Design, lang="es"):
         print(f"  - {assumption_label(a, lang)}")
     for n in rec.notes_text(lang):
         print(f"  * {n}")
-    print(f"\n{t('sample_size', lang)}: N = {ss['n_total']}" +
-          (f" ({ss['n_per_group']} {t('per_group', lang)})" if ss["n_per_group"] and ss["groups"] > 1 else ""))
+    if ss.get("multilevel"):
+        extra = f" ({ss['groups']} {'grupos de' if lang == 'es' else 'clusters of'} {ss['n_per_group']})"
+    else:
+        extra = f" ({ss['n_per_group']} {t('per_group', lang)})" if ss["n_per_group"] and ss["groups"] > 1 else ""
+    print(f"\n{t('sample_size', lang)}: N = {ss['n_total']}" + extra)
     print(explain(ss, lang))
     return rec, ss
 

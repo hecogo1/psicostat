@@ -203,6 +203,20 @@ def sample_size(d: Design, rec=None) -> dict:
                   f"contrastar H₀: κ = {_b(d.agree_null)} frente a una κ esperada de {_b(es)} con {c} categorías equiprobables",
                   f"inter-rater agreement, z test of Cohen's κ (Fleiss, Cohen & Everitt, 1969 asymptotic variance) of "
                   f"H₀: κ = {_b(d.agree_null)} against an expected κ of {_b(es)} with {c} equally likely categories")
+    elif test == "mixedlm":
+        # Effective N for the F (≡ t²) test of one fixed effect (1 df) among p predictors, λ = f² · N
+        # (G*Power: linear multiple regression, R² increase), inflated by the design effect DE = 1 + (m − 1)·ICC
+        # (Kish, 1965) and rounded up to whole clusters of m observations.
+        p, m, icc = len(d.predictors), d.cluster_size, d.icc_plan
+        n_eff = _min_n(lambda n: _f_power(es * n, 1, n - p - 1, a), pw, p + 3)
+        deff = 1 + (m - 1) * icc
+        groups = max(math.ceil(n_eff * deff / m), 2)
+        npg = m
+        n_total = groups * m
+        method = (f"modelo multinivel, prueba de un efecto fijo (1 gl, {p} predictor(es); efecto f²) con N efectivo = {n_eff}, "
+                  f"multiplicado por el efecto de diseño 1 + ({m} − 1) × {_b(icc)} = {deff:.2f} (Kish, 1965) para grupos de {m} observaciones",
+                  f"multilevel model, test of one fixed effect (1 df, {p} predictor(s); effect f²) with effective N = {n_eff}, "
+                  f"multiplied by the design effect 1 + ({m} − 1) × {_b(icc)} = {deff:.2f} (Kish, 1965) for clusters of {m} observations")
     else:  # pragma: no cover
         raise ValueError(test)
 
@@ -249,6 +263,15 @@ def sample_size(d: Design, rec=None) -> dict:
                       "The computation assumes equally frequent categories; if a category is very rare, κ is less precise and more cases are needed."
                       + (" It is computed for unweighted κ." if d.dv_type == "ordinal" and test == "kappa" else "")
                       + (f" It is computed for two raters, which is conservative with {len(d.raters)}." if test == "fleiss" else "")))
+    if test == "mixedlm":
+        notes.append(("El efecto de diseño es adecuado para predictores de nivel 2 (que solo varían entre grupos) y conservador para los de nivel 1, "
+                      "cuya varianza es sobre todo intragrupo (Snijders y Bosker, 2012). "
+                      "Con pocos grupos los errores típicos de nivel 2 y las varianzas se estiman mal: procura al menos 30 grupos (Maas y Hox, 2005)"
+                      + (f"; con este cálculo solo habría {groups}." if groups < 30 else "."),
+                      "The design effect suits level-2 predictors (varying only between clusters) and is conservative for level-1 ones, "
+                      "whose variance is mostly within clusters (Snijders & Bosker, 2012). "
+                      "With few clusters, level-2 standard errors and variances are poorly estimated: aim for at least 30 clusters (Maas & Hox, 2005)"
+                      + (f"; this computation gives only {groups}." if groups < 30 else ".")))
     n_before = n_total
     if d.dropout and d.dropout > 0:
         if npg:
@@ -260,7 +283,7 @@ def sample_size(d: Design, rec=None) -> dict:
                       f"Includes {d.dropout:.0%} expected dropout (unadjusted N = {n_before})."))
     return {"test": test, "family": fam, "effect": es, "effect_label": d.effect_label if d.effect_size is None else "custom",
             "alpha": a, "power": pw, "n_total": int(n_total), "n_per_group": int(npg) if npg else None,
-            "groups": groups, "method": method, "notes": notes, "one_sided": one}
+            "groups": groups, "method": method, "notes": notes, "one_sided": one, "multilevel": test == "mixedlm"}
 
 
 def _b(x):
@@ -354,12 +377,16 @@ def explain(ss: dict, lang="es") -> str:
     elif lang == "es":
         txt = (f"Análisis de potencia a priori ({ss['method'][i]}): para detectar un efecto {sym} = {ss['effect']:.2f} "
                f"con α = {_b(ss['alpha'])} y potencia = {_b(ss['power'])} se necesitan N = {ss['n_total']} participantes")
-        if ss["n_per_group"] and ss["groups"] > 1:
+        if ss.get("multilevel"):
+            txt = txt.replace(" participantes", f" observaciones ({ss['groups']} grupos de {ss['n_per_group']})")
+        elif ss["n_per_group"] and ss["groups"] > 1:
             txt += f" ({ss['n_per_group']} por grupo)"
     else:
         txt = (f"A priori power analysis ({ss['method'][i]}): to detect an effect of {sym} = {ss['effect']:.2f} "
                f"with α = {_b(ss['alpha'])} and power = {_b(ss['power'])}, N = {ss['n_total']} participants are required")
-        if ss["n_per_group"] and ss["groups"] > 1:
+        if ss.get("multilevel"):
+            txt = txt.replace(" participants", f" observations ({ss['groups']} clusters of {ss['n_per_group']})")
+        elif ss["n_per_group"] and ss["groups"] > 1:
             txt += f" ({ss['n_per_group']} per group)"
     txt += "."
     for n in ss["notes"]:

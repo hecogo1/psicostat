@@ -32,6 +32,7 @@ T = {
     "kappa": ("acuerdo entre dos evaluadores (κ de Cohen)", "agreement between two raters (Cohen's κ)"),
     "fleiss": ("acuerdo entre varios evaluadores (κ de Fleiss)", "agreement among several raters (Fleiss' κ)"),
     "icc": ("acuerdo entre evaluadores (coeficiente de correlación intraclase, CCI)", "inter-rater agreement (intraclass correlation coefficient, ICC)"),
+    "mixedlm": ("modelo lineal mixto (multinivel)", "linear mixed-effects (multilevel) model"),
     # assumptions
     "a_normality": ("Normalidad (Shapiro-Wilk)", "Normality (Shapiro-Wilk)"),
     "a_homogeneity": ("Homogeneidad de varianzas (Levene, mediana)", "Homogeneity of variance (Levene, median)"),
@@ -48,6 +49,8 @@ T = {
     "a_unidimensionality": ("Unidimensionalidad (modelo de un factor: χ² y RMSEA ≤ .08)", "Unidimensionality (one-factor model: χ² and RMSEA ≤ .08)"),
     "a_independent_raters": ("Evaluaciones independientes (cada evaluador puntúa sin conocer las puntuaciones de los demás)",
                              "Independent ratings (each rater scores without knowing the others' ratings)"),
+    "a_independent_clusters": ("Independencia entre grupos de nivel 2 (por diseño)", "Independence between level-2 clusters (by design)"),
+    "a_n_clusters": ("Número de grupos de nivel 2 ≥ 30 (Maas y Hox, 2005)", "Number of level-2 clusters ≥ 30 (Maas & Hox, 2005)"),
     "a_independent_obs": ("Independencia de las observaciones (por diseño)", "Independence of observations (by design)"),
     # magnitudes
     "negligible": ("insignificante", "negligible"), "small": ("pequeño", "small"),
@@ -78,6 +81,7 @@ T = {
     "an_moderation": ("Moderación: ¿depende el efecto de X de una tercera variable W?", "Moderation: does the effect of X depend on a third variable W?"),
     "an_reliability": ("Fiabilidad de una escala o cuestionario (α y ω)", "Reliability of a scale or questionnaire (α and ω)"),
     "an_agreement": ("Acuerdo entre evaluadores o jueces (κ y CCI)", "Agreement between raters or judges (κ and ICC)"),
+    "an_multilevel": ("Datos anidados o agrupados: modelo multinivel (mixto)", "Nested or clustered data: multilevel (mixed) model"),
     "q_design": ("Tipo de diseño", "Design type"),
     "d_between": ("Entre sujetos (grupos independientes)", "Between-subjects (independent groups)"),
     "d_within": ("Intra sujetos / medidas repetidas (muestras relacionadas)", "Within-subjects / repeated measures (paired)"),
@@ -116,6 +120,12 @@ T = {
     "q_categories": ("Categorías posibles (separadas por comas; si son ordinales, de menor a mayor)",
                      "Possible categories (comma separated; if ordinal, from lowest to highest)"),
     "q_agree_null": ("Acuerdo mínimo aceptable (H₀; 0 = frente al azar)", "Minimum acceptable agreement (H₀; 0 = against chance)"),
+    "q_cluster": ("Variable de agrupación, nivel 2 (sin espacios; p. ej., clase, centro o participante)",
+                  "Clustering variable, level 2 (no spaces; e.g., class, school or participant)"),
+    "q_random_slope": ("Pendiente aleatoria (opcional): predictor cuyo efecto puede variar entre grupos",
+                       "Random slope (optional): predictor whose effect may vary across clusters"),
+    "q_cluster_size": ("Observaciones esperadas por grupo", "Expected observations per cluster"),
+    "q_icc_plan": ("CCI esperado (proporción de varianza entre grupos)", "Expected ICC (share of variance between clusters)"),
     "q_covariates": ("Covariables (separadas por comas, opcional)", "Covariates (comma separated, optional)"),
     "q_effect_label": ("Tamaño del efecto esperado", "Expected effect size"),
     "q_effect_custom": ("Valor concreto (opcional; vacío = usar la etiqueta)", "Custom value (optional; empty = use label)"),
@@ -125,12 +135,14 @@ T = {
     "q_rho": ("Correlación esperada entre medidas repetidas", "Expected correlation among repeated measures"),
     "q_event_rate": ("Proporción esperada del evento (VD = 1)", "Expected event proportion (DV = 1)"),
     "effect_help": (
-        "Guía de Cohen (1988): d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35 (también la interacción en moderación); "
+        "Guía de Cohen (1988): d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35 "
+        "(también la interacción en moderación y un efecto fijo en modelos multinivel); "
         "sendas de mediación a=b = .14/.39/.59 (Fritz y MacKinnon, 2007); "
         "en fiabilidad, el «efecto» es el α de Cronbach esperado (.80/.85/.90) frente al mínimo aceptable (.70 por defecto); "
         "en acuerdo entre evaluadores, el κ o CCI esperado (.60/.70/.80) frente al mínimo aceptable (.40 por defecto). "
         "Mejor aún: usa el efecto de un metaanálisis o estudio previo (y sé conservador: los efectos publicados suelen estar inflados).",
-        "Cohen (1988) benchmarks: d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35 (also the moderation interaction); "
+        "Cohen (1988) benchmarks: d = 0.2/0.5/0.8; f = .10/.25/.40; r = .10/.30/.50; w = .10/.30/.50; f² = .02/.15/.35 "
+        "(also the moderation interaction and a fixed effect in multilevel models); "
         "mediation paths a=b = .14/.39/.59 (Fritz and MacKinnon, 2007); "
         "for reliability, the “effect” is the expected Cronbach's α (.80/.85/.90) against the minimum acceptable value (.70 by default); "
         "for inter-rater agreement, the expected κ or ICC (.60/.70/.80) against the minimum acceptable value (.40 by default). "

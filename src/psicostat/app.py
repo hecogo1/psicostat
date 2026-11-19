@@ -124,7 +124,7 @@ st.markdown(CSS, unsafe_allow_html=True)
 # --------------------------------------------------------------------------- state
 FIELDS = ["title", "question", "analysis", "design", "dv_type", "iv_type", "dv_name", "iv_name", "levels", "n_factors",
           "factor_b_name", "levels_b", "dv_levels", "covariates", "predictors", "mediator", "moderator", "moderator_type", "moderator_levels", "center",
-          "items", "reverse_items", "scale_min", "scale_max", "alpha_null", "raters", "agree_null", "rho", "event_rate",
+          "items", "reverse_items", "scale_min", "scale_max", "alpha_null", "raters", "agree_null", "cluster", "random_slope", "cluster_size", "icc_plan", "rho", "event_rate",
           "effect_label", "effect_custom", "alpha", "power", "dropout", "decimal_comma", "alternative"]
 LISTS = {"levels", "levels_b", "dv_levels", "covariates", "predictors", "moderator_levels", "items", "reverse_items", "raters"}
 
@@ -199,6 +199,9 @@ def current_design():
     elif a == "reliability":
         kw.update(dv_name=g["dv_name"], items=lst(g["items"]), reverse_items=lst(g["reverse_items"]),
                   scale_min=float(g["scale_min"]), scale_max=float(g["scale_max"]), alpha_null=float(g["alpha_null"]))
+    elif a == "multilevel":
+        kw.update(dv_type="continuous", dv_name=g["dv_name"], cluster=g["cluster"] or "clase", predictors=lst(g["predictors"]),
+                  random_slope=(g["random_slope"] or "").strip(), cluster_size=int(g["cluster_size"] or 20), icc_plan=float(g["icc_plan"]))
     elif a == "agreement":
         kw.update(dv_type=g["dv_type"], dv_name=g["dv_name"], raters=lst(g["raters"]), agree_null=float(g["agree_null"]))
         if g["dv_type"] != "continuous":
@@ -346,20 +349,24 @@ with main:
             c1, c2 = st.columns(2)
             c1.text_input(t("q_title", lang), key="k_title", placeholder=L("p. ej., Mindfulness y estrés académico", "e.g., Mindfulness and academic stress"))
             c2.text_input(t("q_question", lang), key="k_question", placeholder=L("¿Reduce X la variable Y?", "Does X reduce Y?"))
-            st.radio(t("q_analysis", lang), ["compare", "correlation", "regression", "association", "mediation", "moderation", "reliability", "agreement"], key="k_analysis",
+            st.radio(t("q_analysis", lang), ["compare", "correlation", "regression", "association", "mediation", "moderation", "reliability", "agreement", "multilevel"], key="k_analysis",
                      format_func=lambda a: t("an_" + a, lang),
                      help=L("Comparar: diferencias entre grupos o momentos. Correlación: si dos variables varían juntas. "
                             "Regresión: predecir una variable a partir de otras. Asociación: relación entre dos variables de categorías. "
                             "Mediación: si X influye en Y a través de un mediador M (efecto indirecto). "
                             "Moderación: si el efecto de X sobre Y cambia según una tercera variable W (interacción). "
                             "Fiabilidad: si los ítems de una escala o cuestionario miden de forma consistente (α de Cronbach y ω de McDonald). "
-                            "Acuerdo: si dos o más evaluadores o jueces puntúan o clasifican igual a los mismos casos (κ de Cohen o de Fleiss y CCI).",
+                            "Acuerdo: si dos o más evaluadores o jueces puntúan o clasifican igual a los mismos casos (κ de Cohen o de Fleiss y CCI). "
+                            "Multinivel: predecir una variable cuando las observaciones están agrupadas (alumnado en clases, pacientes por terapeuta, "
+                            "medidas repetidas de una misma persona) y, por tanto, no son independientes.",
                             "Compare: differences between groups or time points. Correlation: whether two variables vary together. "
                             "Regression: predict one variable from others. Association: relation between two categorical variables. "
                             "Mediation: whether X affects Y through a mediator M (indirect effect). "
                             "Moderation: whether the effect of X on Y changes with a third variable W (interaction). "
                             "Reliability: whether the items of a scale or questionnaire measure consistently (Cronbach's α and McDonald's ω). "
-                            "Agreement: whether two or more raters or judges score or classify the same cases alike (Cohen's or Fleiss' κ and ICC)."))
+                            "Agreement: whether two or more raters or judges score or classify the same cases alike (Cohen's or Fleiss' κ and ICC). "
+                            "Multilevel: predict an outcome when observations are clustered (students in classes, patients per therapist, "
+                            "repeated measures of the same person) and therefore not independent."))
             if ss.k_analysis == "compare":
                 st.radio(t("q_design", lang), ["between", "within", "mixed"], key="k_design", format_func=lambda x: t("d_" + x, lang),
                          help=L("Entre sujetos: cada persona está en un solo grupo. Intra sujetos: las mismas personas se miden varias veces. "
@@ -458,6 +465,32 @@ with main:
                 c3.number_input(t("q_scale_max", lang), step=1.0, key="k_scale_max", help=L("La opción de respuesta más alta (p. ej., 5).", "The highest response option (e.g., 5)."))
                 st.caption(L("Fiabilidad: α de Cronbach (IC de Feldt), ω de McDonald (modelo de un factor), correlación ítem-resto y α si se elimina el ítem.",
                              "Reliability: Cronbach's α (Feldt CI), McDonald's ω (one-factor model), item-rest correlation and α if item deleted."))
+            elif a == "multilevel":
+                c1.text_input(t("q_dv_name", lang), key="k_dv_name",
+                              help=L("La variable resultado, medida en cada observación (nivel 1) y cuantitativa.",
+                                     "The outcome, measured for each observation (level 1) and continuous."))
+                c2.text_input(t("q_cluster", lang), key="k_cluster",
+                              help=L("La columna que indica a qué grupo pertenece cada fila: clase, colegio, terapeuta… o el participante, "
+                                     "si cada persona aporta varias medidas (formato largo).",
+                                     "The column saying which cluster each row belongs to: class, school, therapist… or the participant "
+                                     "if each person contributes several measurements (long format)."))
+                c3.text_input(t("q_predictors", lang), key="k_predictors",
+                              help=L("Pueden ser de nivel 1 (varían dentro del grupo, p. ej., horas de estudio) o de nivel 2 (iguales para todo el grupo, "
+                                     "p. ej., tamaño de la clase). PsicoStat detecta el nivel. Codifica los dicotómicos como 0/1.",
+                                     "They may be level 1 (vary within the cluster, e.g., study hours) or level 2 (the same for the whole cluster, "
+                                     "e.g., class size). PsicoStat detects the level. Code dichotomous ones as 0/1."))
+                st.text_input(t("q_random_slope", lang), key="k_random_slope", placeholder=L("vacío = solo intercepto aleatorio", "empty = random intercept only"),
+                              help=L("Escribe uno de los predictores de nivel 1 si crees que su efecto cambia de un grupo a otro (p. ej., horas de estudio "
+                                     "influye más en unas clases que en otras). Se contrasta si esa variación es real.",
+                                     "Enter one level-1 predictor if you think its effect changes from cluster to cluster (e.g., study hours matter more "
+                                     "in some classes). Whether that variation is real is tested."))
+                st.toggle(L("Centrar los predictores en la media (recomendado)", "Centre predictors at the mean (recommended)"), key="k_center",
+                          help=L("Así el intercepto es el valor esperado en la media de los predictores y la varianza entre grupos se interpreta en ese punto. "
+                                 "No cambia las pendientes.",
+                                 "The intercept is then the expected value at the mean of the predictors, and the between-cluster variance is read at "
+                                 "that point. Slopes do not change."))
+                st.caption(L("Modelo lineal mixto: CCI del modelo nulo, efectos fijos (B con IC 95%), varianzas entre grupos y residual, R² marginal y condicional.",
+                             "Linear mixed model: null-model ICC, fixed effects (B with 95% CI), between-cluster and residual variances, marginal and conditional R²."))
             elif a == "agreement":
                 if len(lst(ss.get("k_raters", ""))) < 2:
                     ss.k_raters = "evaluador1, evaluador2"
@@ -525,6 +558,16 @@ with main:
                 st.number_input(t("q_alpha_null", lang), 0.0, 0.95, step=0.05, key="k_alpha_null",
                                 help=L("Valor por debajo del cual la fiabilidad no te parecería suficiente (por convención, .70 para investigación).",
                                        "Value below which reliability would not be good enough for you (conventionally .70 for research)."))
+            if ss.k_analysis == "multilevel":
+                m1, m2 = st.columns(2)
+                m1.number_input(t("q_cluster_size", lang), 2, 10000, step=1, key="k_cluster_size",
+                                help=L("Cuántas observaciones esperas en cada grupo (alumnos por clase, medidas por persona…).",
+                                       "How many observations you expect per cluster (students per class, measurements per person…)."))
+                m2.number_input(t("q_icc_plan", lang), 0.0, 0.9, step=0.05, key="k_icc_plan",
+                                help=L("Qué parte de la varianza de la VD se debe al grupo. En educación y psicología suele estar entre .05 y .20 "
+                                       "(usa un estudio previo si lo hay). Cuanto mayor, más grupos necesitas.",
+                                       "Share of the DV variance due to the cluster. In education and psychology it is usually .05–.20 "
+                                       "(use a prior study if available). The larger it is, the more clusters you need."))
             if ss.k_analysis == "agreement":
                 st.number_input(t("q_agree_null", lang), 0.0, 0.95, step=0.05, key="k_agree_null",
                                 help=L("Valor por debajo del cual el acuerdo no te parecería suficiente (p. ej., .40). Con 0 se contrasta solo "
@@ -559,7 +602,9 @@ with main:
                 cards([
                     (L("Prueba recomendada", "Recommended test"), cap(rec.label(lang).split(" (")[0]), L("Alternativa: ", "Fallback: ") + rec.fallback_label(lang), ""),
                     (L("Tamaño muestral", "Sample size"), f"N = {ssz['n_total']}",
-                     (f"{ssz['n_per_group']} {t('per_group', lang)}" if ssz["n_per_group"] and ssz["groups"] > 1 else L("participantes", "participants")), "indigo"),
+                     (L(f"{ssz['groups']} grupos × {ssz['n_per_group']} observaciones", f"{ssz['groups']} clusters × {ssz['n_per_group']} observations")
+                      if ssz.get("multilevel") else
+                      f"{ssz['n_per_group']} {t('per_group', lang)}" if ssz["n_per_group"] and ssz["groups"] > 1 else L("participantes", "participants")), "indigo"),
                     ((L("α esperado", "Expected α"), f"α = {fmt_num(ssz['effect'], True)}", f"H₀: α = {fmt_num(design.alpha_null, True)}", "amber") if rel else
                      (L("Acuerdo esperado", "Expected agreement"), f"{'ICC' if rec.test == 'icc' else 'κ'} = {fmt_num(ssz['effect'], True)}",
                       f"H₀: {'ICC' if rec.test == 'icc' else 'κ'} = {fmt_num(design.agree_null, True)}", "amber") if agr else
@@ -652,6 +697,20 @@ with main:
                                  (ci_txt if ci_ok else "") + (f" · {t(lab_k, lang)}" if lab_k else ""), "amber"),
                                 (r0["label"].split(" / ")[0] if lang == "es" else r0["label"].split(" / ")[-1], dc(fmt_p(r0["p"])),
                                  dc(f"H₀ = {fmt_num(design.agree_null, True)}"), "rose"),
+                            ])
+                        elif res.test == "mixedlm":
+                            ml = res.extra_tables["ml_null"].iloc[0]
+                            fitm = res.extra_tables["model"].iloc[0]
+                            cards([
+                                (L("Análisis", "Analysis"), L("Modelo multinivel", "Multilevel model"),
+                                 L("intercepto", "intercept") + (L(" y pendiente", " and slope") if design.random_slope else "") + L(" aleatorios", " random"), ""),
+                                ("N", res.n, L(f"{int(ml['J'])} grupos de {design.cluster}", f"{int(ml['J'])} {design.cluster} clusters")
+                                 + (L(f" · {res.n_excluded} excluidas", f" · {res.n_excluded} excluded") if res.n_excluded else ""), "indigo"),
+                                (L("CCI (modelo nulo)", "ICC (null model)"), dc(fmt_num(ml["CCI/ICC"], True)),
+                                 dc(L(f"efecto de diseño = {ml['efecto de diseño/design effect']:.2f}", f"design effect = {ml['efecto de diseño/design effect']:.2f}")), "amber"),
+                                ("R² " + L("marginal · condicional", "marginal · conditional"),
+                                 dc(f"{fmt_num(fitm['R²m (marginal)'], True)} · {fmt_num(fitm['R²c (condicional/conditional)'], True)}"),
+                                 dc(f"χ²({int(fitm['gl/df'])}) = {fmt_num(fitm['χ² (efectos fijos/fixed effects)'])}, {fmt_p(fitm['p'])}"), "rose"),
                             ])
                         else:
                             cards([

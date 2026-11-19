@@ -10,7 +10,7 @@ from .i18n import t
 ALTERNATIVES = ("two-sided", "greater", "less")
 # tests for which a one-sided (directional) alternative is valid
 DIRECTIONAL_TESTS = {"ttest_ind", "mannwhitney", "ttest_paired", "wilcoxon", "pearson", "spearman"}
-ANALYSES = ("compare", "correlation", "regression", "association", "mediation", "moderation", "reliability", "agreement")
+ANALYSES = ("compare", "correlation", "regression", "association", "mediation", "moderation", "reliability", "agreement", "multilevel")
 DESIGNS = ("between", "within", "mixed")
 LEVELS = ("continuous", "ordinal", "nominal")
 
@@ -34,7 +34,7 @@ BENCHMARKS = {
 class Design:
     title: str = ""
     question: str = ""
-    analysis: str = "compare"          # compare / correlation / regression / association / mediation / moderation / reliability / agreement
+    analysis: str = "compare"          # compare / correlation / regression / association / mediation / moderation / reliability / agreement / multilevel
     design: str = "between"            # between / within / mixed
     n_factors: int = 1                 # 1 or 2 (factorial)
     n_groups: int = 2                  # levels of factor A (groups or conditions)
@@ -60,6 +60,10 @@ class Design:
     alpha_null: float = 0.70         # reliability: minimum acceptable α tested in H₀ (Feldt F test; Bonett N)
     raters: list = field(default_factory=list)         # agreement: one column per rater (dv_name = what is rated)
     agree_null: float = 0.40         # agreement: minimum acceptable κ / ICC tested in H₀ (0 = classic test against chance)
+    cluster: str = "clase"           # multilevel: column with the level-2 unit (class, school, therapist, participant…)
+    random_slope: str = ""           # multilevel: optional predictor whose slope varies across clusters ("" = random intercept only)
+    cluster_size: int = 20           # multilevel: expected mean number of observations per cluster (sample size planning)
+    icc_plan: float = 0.10           # multilevel: expected intraclass correlation of the DV (design effect)
     covariates: list = field(default_factory=list)
     effect_label: str = "medium"
     effect_size: Optional[float] = None
@@ -138,6 +142,24 @@ class Design:
             self.agree_null = float(self.agree_null)
             if not 0 <= self.agree_null < 1:
                 raise ValueError("El acuerdo mínimo aceptable debe estar en [0, 1) / the minimum acceptable agreement must be in [0, 1)")
+        self.cluster, self.random_slope = str(self.cluster).strip(), str(self.random_slope or "").strip()
+        if self.analysis == "multilevel":
+            self.predictors = [str(x).strip() for x in self.predictors if str(x).strip()] or ["x1"]
+            if not self.cluster:
+                raise ValueError("Indica la variable de agrupación (nivel 2) / give the clustering (level-2) variable")
+            if len(set(self.predictors)) != len(self.predictors):
+                raise ValueError("Hay predictores repetidos / duplicated predictor names")
+            if self.cluster in self.predictors or self.cluster == self.dv_name or self.dv_name in self.predictors:
+                raise ValueError("La VD, los predictores y la variable de agrupación deben ser columnas distintas / "
+                                 "the DV, the predictors and the clustering variable must be different columns")
+            if self.random_slope and self.random_slope not in self.predictors:
+                raise ValueError(f"La pendiente aleatoria debe ser uno de los predictores / the random slope must be one of the predictors: {self.random_slope}")
+            self.cluster_size = int(self.cluster_size)
+            if self.cluster_size < 2:
+                raise ValueError("Se necesitan al menos 2 observaciones por grupo / at least 2 observations per cluster are needed")
+            self.icc_plan = float(self.icc_plan)
+            if not 0 <= self.icc_plan < 1:
+                raise ValueError("El CCI esperado debe estar en [0, 1) / the expected ICC must be in [0, 1)")
         if self.alternative not in ALTERNATIVES:
             raise ValueError(f"alternative must be one of {ALTERNATIVES}")
         if self.alternative != "two-sided" and recommend(self).test not in DIRECTIONAL_TESTS:
@@ -277,6 +299,28 @@ def recommend(d: Design) -> Recommendation:
                   f"Fleiss' (1971) κ for {len(d.raters)} raters with a percentile bootstrap 95% CI over subjects; with H₀: κ = 0, z test "
                   "with the Fleiss, Nee & Landis (1979) SE." + (" Fleiss' κ ignores the order of the categories." if w else ""))]
         return Recommendation("fleiss", None, "agr", ["a_independent_obs", ind], notes)
+    if d.analysis == "multilevel":
+        slope = d.random_slope
+        notes = [(f"Modelo lineal mixto (multinivel) de dos niveles: observaciones (nivel 1) anidadas en {d.cluster} (nivel 2), con intercepto aleatorio"
+                  + (f" y pendiente aleatoria de {slope}" if slope else "") + ", estimado por máxima verosimilitud restringida (REML)"
+                  + (" con los predictores centrados en la media general" if d.center else "") + ". "
+                  "Primero se ajusta el modelo nulo (sin predictores) para obtener el coeficiente de correlación intraclase (CCI) y el efecto de diseño; "
+                  "después, los efectos fijos de los predictores (B con IC 95% de Wald), los componentes de varianza y el R² marginal y condicional "
+                  "de Nakagawa y Schielzeth (2013)." + (" La pendiente aleatoria se contrasta con una prueba de razón de verosimilitudes (mezcla de χ²)." if slope else ""),
+                  f"Two-level linear mixed-effects (multilevel) model: observations (level 1) nested in {d.cluster} (level 2), with a random intercept"
+                  + (f" and a random slope for {slope}" if slope else "") + ", estimated by restricted maximum likelihood (REML)"
+                  + (" with grand-mean-centred predictors" if d.center else "") + ". "
+                  "The null model (no predictors) is fitted first to obtain the intraclass correlation coefficient (ICC) and the design effect; "
+                  "then the fixed effects of the predictors (B with Wald 95% CI), the variance components and Nakagawa and Schielzeth's (2013) "
+                  "marginal and conditional R²." + (" The random slope is tested with a likelihood-ratio test (χ² mixture)." if slope else "")),
+                 ("Úsalo cuando las observaciones no son independientes: alumnado de una misma clase, pacientes de un mismo terapeuta o varias medidas "
+                  "de una misma persona (en formato largo: una fila por medida, con el participante como grupo). Los predictores dicotómicos se codifican 0/1.",
+                  "Use it when observations are not independent: students in the same class, patients of the same therapist or several measurements "
+                  "of the same person (long format: one row per measurement, with the participant as cluster). Dichotomous predictors are coded 0/1.")]
+        if d.dv_type != "continuous":
+            notes.append(("La VD debe ser cuantitativa para este modelo lineal mixto; con VD dicotómica u ordinal se necesita un modelo mixto generalizado (GLMM).",
+                          "The DV must be continuous for this linear mixed model; a dichotomous or ordinal DV needs a generalized linear mixed model (GLMM)."))
+        return Recommendation("mixedlm", None, "f2", ["a_independent_clusters", "a_n_clusters", "a_linearity", "a_normality", "a_homoscedasticity"], notes)
     if d.analysis == "correlation":
         if "ordinal" in (d.dv_type, d.iv_type):
             return Recommendation("spearman", None, "r", [indep, "a_linearity"],

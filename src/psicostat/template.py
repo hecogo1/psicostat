@@ -51,6 +51,15 @@ def columns(d: Design):
             cols.append((r, f"Evaluador {i}: {'categoría asignada' if cat else 'puntuación'} de {d.dv_name}",
                          f"Rater {i}: {'assigned category' if cat else 'score'} of {d.dv_name}",
                          d.dv_type, ", ".join(d.dv_levels) if cat else ""))
+    elif rec.test == "mixedlm":
+        cols[0] = ("id", "Identificador único de la observación (fila)", "Unique observation (row) identifier", "id", "")
+        cols.append((d.cluster, "Grupo de nivel 2 al que pertenece la observación (p. ej., clase, centro, terapeuta o participante)",
+                     "Level-2 cluster the observation belongs to (e.g., class, school, therapist or participant)", "nominal", ""))
+        for p in d.predictors:
+            slope = " — con pendiente aleatoria" if p == d.random_slope else ""
+            slope_en = " — with random slope" if p == d.random_slope else ""
+            cols.append((p, f"Predictor (nivel 1 o 2; dicotómico = 0/1){slope}", f"Predictor (level 1 or 2; dichotomous = 0/1){slope_en}", "continuous", ""))
+        cols.append((d.dv_name, "Variable dependiente (nivel 1)", "Dependent variable (level 1)", "continuous", ""))
     elif rec.test in ("linreg", "logreg", "ordreg"):
         for p in d.predictors:
             cols.append((p, "Predictor", "Predictor", d.iv_type,
@@ -100,13 +109,15 @@ def make_template(d: Design, n: int = 20):
     df["id"] = [f"P{i + 1:03d}" for i in range(n)]
     rec = recommend(d)
     if d.design in ("between", "mixed") and rec.test not in ("chi2", "fisher", "pearson", "spearman", "linreg", "logreg", "ordreg", "mediation", "moderation", "reliability",
-                                                            "kappa", "fleiss", "icc"):
+                                                            "kappa", "fleiss", "icc", "mixedlm"):
         if d.n_factors == 2 and d.design == "between":
             cells = [(a, b) for a in d.levels for b in d.levels_b]
             df[d.iv_name] = [cells[i % len(cells)][0] for i in range(n)]
             df[d.factor_b_name] = [cells[i % len(cells)][1] for i in range(n)]
         else:
             df[d.iv_name] = [d.levels[i % len(d.levels)] for i in range(n)]
+    if rec.test == "mixedlm":
+        df[d.cluster] = [f"G{i // d.cluster_size + 1:02d}" for i in range(n)]
     if rec.test in ("mediation", "moderation") and d.iv_type == "nominal" and d.levels:
         df[d.iv_name] = [d.levels[i % len(d.levels)] for i in range(n)]
     if rec.test == "moderation" and d.moderator_type == "nominal" and d.moderator_levels:
