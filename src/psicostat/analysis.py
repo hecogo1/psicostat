@@ -359,6 +359,8 @@ def analyze(d: Design, data, outdir=None) -> Result:
         numeric_cols = []
     if rec.test == "icc":
         numeric_cols = list(d.raters)
+    if rec.test == "mixedlm":
+        numeric_cols = list(d.predictors) + [d.dv_name]
     if rec.test == "moderation":
         numeric_cols = ([d.dv_name] + ([] if d.iv_type == "nominal" else [d.iv_name])
                         + ([] if d.moderator_type == "nominal" else [d.moderator]))
@@ -377,7 +379,7 @@ def analyze(d: Design, data, outdir=None) -> Result:
         "chi2": _chi2, "fisher": _chi2, "mcnemar": _mcnemar, "cochran": _cochran,
         "pearson": _corr, "spearman": _corr, "linreg": _linreg, "logreg": _logreg, "ordreg": _ordreg, "mediation": _mediation,
         "moderation": _moderation, "reliability": _reliability,
-        "kappa": _agreement, "fleiss": _agreement, "icc": _agreement,
+        "kappa": _agreement, "fleiss": _agreement, "icc": _agreement, "mixedlm": _mixedlm,
     }[rec.test]
     fn(d, df, res, outdir)
     return res
@@ -1984,3 +1986,266 @@ def _agreement_icc(d, df, res, outdir, raters, what, n, k, fmt, c0, _t):
     ax.legend(frameon=False, fontsize=8, ncol=min(k, 4))
     ax.spines[["top", "right"]].set_visible(False)
     res.figures.append(_save(fig, outdir, "fig_acuerdo.png"))
+
+
+# ------------------------------------------------------------------ multilevel (linear mixed-effects) model
+def fit_mixed(y, X, groups, Z=None, reml=True):
+    """Fit a linear mixed model (statsmodels MixedLM) with several optimizers and keep the fit with the highest finite
+    (restricted) log-likelihood, which guards against an optimizer stopping at a degenerate point. Returns (fit, warnings)."""
+    model = sm.MixedLM(y, X, groups, exog_re=Z)
+    best, msgs = None, []
+    for method in ("bfgs", "lbfgs", "powell"):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            try:
+                fit = model.fit(reml=reml, method=method)
+            except (np.linalg.LinAlgError, ValueError):  # pragma: no cover
+                continue
+        if not np.isfinite(fit.llf):
+            continue
+        if best is None or fit.llf > best.llf + 1e-8:
+            best, msgs = fit, [str(w.message) for w in caught]
+    if best is None:
+        raise DataError("No se pudo estimar el modelo multinivel (revisa los datos) / the multilevel model could not be estimated (check the data)")
+    return best, msgs
+
+
+def lrt_mixture(lr, df_low):
+    """p value of a likelihood-ratio test of variance components on the boundary: 50:50 mixture of χ²(df_low) and χ²(df_low + 1)
+    (Self & Liang, 1987); df_low = 0 is the test of a single variance (point mass at 0)."""
+    lr = max(float(lr), 0.0)
+    if lr <= 0:
+        return 1.0
+    low = 0.0 if df_low == 0 else stats.chi2.sf(lr, df_low)
+    return float(0.5 * low + 0.5 * stats.chi2.sf(lr, df_low + 1))
+
+
+def icc_null(fit):
+    """ICC of a random-intercept null model: τ00 / (τ00 + σ²)."""
+    tau = float(np.asarray(fit.cov_re)[0, 0])
+    return tau / (tau + float(fit.scale))
+
+
+def nakagawa_r2(fit, X, Z=None):
+    """Marginal and conditional R² (Nakagawa & Schielzeth, 2013), with Johnson's (2014) extension for random slopes:
+    the random-effects variance is the mean of diag(Z Σ Zᵀ)."""
+    beta = np.asarray(fit.fe_params)
+    Xa = np.asarray(X, float)
+    var_f = float(np.var(Xa[:, 1:] @ beta[1:], ddof=1)) if Xa.shape[1] > 1 else 0.0
+    S = np.asarray(fit.cov_re, float)
+    Za = np.ones((Xa.shape[0], 1)) if Z is None else np.asarray(Z, float)
+    var_r = float(np.mean(np.einsum("ij,jk,ik->i", Za, S, Za)))
+    total = var_f + var_r + float(fit.scale)
+    return var_f / total, (var_f + var_r) / total
+
+
+def _plot_multilevel(df, d, fit, focal, level1, fixed_names, means, outdir):
+    """Cluster-specific (BLUP) regression lines for the focal predictor plus the fixed (average) line (other predictors at their mean)."""
+    fig, ax = plt.subplots(figsize=(6.4, 4.2))
+    beta = fit.fe_params
+    others = sum(beta[p] * (df[p].mean() - means[p]) for p in fixed_names if p != focal)
+    b1 = beta[focal]
+    b0 = beta["const"] + others - b1 * means[focal]     # back to the original scale of the focal predictor
+    x_all = df[focal].to_numpy(float)
+    if level1:
+        ax.scatter(x_all, df[d.dv_name], s=9, alpha=.25, color="#3730A3", edgecolor="none")
+        for i, (g, sub) in enumerate(df.groupby(d.cluster, sort=False)):
+            u = fit.random_effects[g]
+            u0 = float(u.iloc[0])
+            u1 = float(u[focal]) if focal in u.index else 0.0
+            xs = np.array([sub[focal].min(), sub[focal].max()], float)
+            ax.plot(xs, b0 + u0 + (b1 + u1) * xs, color=PALETTE[0], alpha=.35, lw=1,
+                    label=f"cada {d.cluster} / each {d.cluster}" if i == 0 else None)
+    else:
+        means = df.groupby(d.cluster, sort=False).agg(x=(focal, "mean"), y=(d.dv_name, "mean"))
+        ax.scatter(means["x"], means["y"], s=26, alpha=.75, color="#3730A3", edgecolor="none")
+    xs = np.linspace(np.min(x_all), np.max(x_all), 50)
+    ax.plot(xs, b0 + b1 * xs, color=ACCENT, lw=2.6, label="efecto fijo / fixed effect")
+    ax.set_xlabel(focal)
+    ax.set_ylabel(d.dv_name + ("" if level1 else f" (media por {d.cluster} / {d.cluster} mean)"))
+    ax.set_title(f"{d.dv_name} ~ {focal}" + ("" if level1 else " (nivel 2 / level 2)"))
+    ax.legend(loc="best")
+    ax.spines[["top", "right"]].set_visible(False)
+    return _save(fig, outdir, "fig_multinivel.png")
+
+
+def _plot_caterpillar(fit, cluster, outdir):
+    """Random intercepts (BLUPs) with approximate 95% intervals from their conditional variances, sorted."""
+    rows = []
+    for g, u in fit.random_effects.items():
+        v = np.asarray(fit.random_effects_cov[g], float)[0, 0]
+        rows.append((str(g), float(u.iloc[0]), 1.96 * np.sqrt(max(v, 0.0))))
+    rows.sort(key=lambda r: r[1])
+    k = len(rows)
+    fig, ax = plt.subplots(figsize=(6.4, max(2.6, min(.16 * k + 1.2, 9))))
+    y = np.arange(k)
+    est = np.array([r[1] for r in rows])
+    err = np.array([r[2] for r in rows])
+    colors = [PALETTE[0] if abs(e) > h else "#94A3B8" for e, h in zip(est, err)]
+    ax.errorbar(est, y, xerr=err, fmt="none", ecolor="#CBD5E1", lw=1.2)
+    ax.scatter(est, y, color=colors, s=18, zorder=3)
+    ax.axvline(0, color=ACCENT, lw=1.4, ls="--")
+    ax.set_yticks(y, [r[0] for r in rows] if k <= 40 else [""] * k)
+    ax.set_xlabel(f"desviación del intercepto por {cluster} / random intercept (BLUP)")
+    ax.set_title(f"{cluster}: interceptos aleatorios / random intercepts")
+    ax.spines[["top", "right"]].set_visible(False)
+    return _save(fig, outdir, "fig_interceptos.png")
+
+
+def _mixedlm(d, df, res, outdir):
+    preds, y_name, cl = list(d.predictors), d.dv_name, d.cluster
+    df = df.copy()
+    df[cl] = df[cl].astype(str).str.strip()
+    sizes = df.groupby(cl).size()
+    J, n = len(sizes), len(df)
+    if J < 3:
+        raise DataError(f"Se necesitan al menos 3 grupos de nivel 2 en {cl} (hay {J}) / at least 3 level-2 clusters are needed in {cl} (found {J})")
+    if n < J + len(preds) + 3:
+        raise DataError("Muy pocas observaciones para el número de grupos y predictores / too few observations for the number of clusters and predictors")
+    const = [c for c in preds + [y_name] if df[c].std() == 0]
+    if const:
+        raise DataError(f"Variables sin variabilidad / variables with no variance: {const}")
+    y = df[y_name].astype(float)
+    groups = df[cl].to_numpy()
+    P = df[preds].astype(float)
+    means = P.mean() if d.center else P.mean() * 0
+    X = sm.add_constant(P - means, has_constant="add")     # grand-mean centring (default): the intercept is the expected value at the means
+    X0 = X[["const"]]
+    Z = X[["const", d.random_slope]] if d.random_slope else None
+    res.descriptives = _desc({c: df[c] for c in [y_name] + preds})
+    # predictor level: level 2 if constant within every cluster; otherwise share of its variance between clusters
+    level, between = {}, {}
+    for p in preds:
+        cm = df.groupby(cl)[p].transform("mean")
+        level[p] = 2 if np.allclose(df[p], cm) else 1
+        between[p] = float(np.var(cm, ddof=0) / np.var(df[p], ddof=0))
+    if d.random_slope and level[d.random_slope] == 2:
+        raise DataError(f"{d.random_slope} no varía dentro de los grupos (es de nivel 2): no puede tener pendiente aleatoria / "
+                        f"{d.random_slope} does not vary within clusters (level 2): it cannot have a random slope")
+    # 1) null model: ICC and likelihood-ratio test of the intercept variance against OLS
+    null_reml, w0 = fit_mixed(y, X0, groups)
+    null_ml, _ = fit_mixed(y, X0, groups, reml=False)
+    ols0 = sm.OLS(y, X0).fit()
+    lr0 = 2 * (null_ml.llf - ols0.llf)
+    p0 = lrt_mixture(lr0, 0)
+    tau0, sig0 = float(np.asarray(null_reml.cov_re)[0, 0]), float(null_reml.scale)
+    icc = icc_null(null_reml)
+    m_bar = n / J
+    deff = 1 + (m_bar - 1) * icc
+    # 2) full model (REML) and, for the omnibus test of the fixed effects, ML fits with the same random part
+    full, w1 = fit_mixed(y, X, groups, Z)
+    full_ml, _ = fit_mixed(y, X, groups, Z, reml=False)
+    base_ml, _ = fit_mixed(y, X0, groups, Z, reml=False)
+    lr_f = max(2 * (full_ml.llf - base_ml.llf), 0.0)
+    df_f = len(preds)
+    p_f = float(stats.chi2.sf(lr_f, df_f))
+    r2m, r2c = nakagawa_r2(full, X, Z)
+    S = np.asarray(full.cov_re, float)
+    warn = w0 + w1
+    # 3) random slope: REML likelihood-ratio test against the random-intercept model with the same fixed effects
+    slope_test = None
+    if d.random_slope:
+        ri, _ = fit_mixed(y, X, groups)
+        lr_s = max(2 * (full.llf - ri.llf), 0.0)
+        slope_test = (lr_s, lrt_mixture(lr_s, 1))
+    # assumptions
+    resid = np.asarray(full.resid, float)
+    w, p_w = _shapiro(resid)
+    blup = np.array([float(u.iloc[0]) for u in full.random_effects.values()])
+    w_b, p_b = _shapiro(blup)
+    bp = het_breuschpagan(resid, X)
+    res.assumptions += [
+        {"key": "a_n_clusters", "detail": f"J = {J}; n/grupo = {sizes.min()}–{sizes.max()} (M = {m_bar:.1f})", "p": None, "ok": J >= 30},
+        {"key": "a_normality", "detail": f"residuos nivel 1/level-1 residuals: W = {E.fmt_num(w, True, 3)}, {E.fmt_p(p_w)}", "p": p_w, "ok": not p_w < .05},
+        {"key": "a_normality", "detail": f"interceptos aleatorios/random intercepts: W = {E.fmt_num(w_b, True, 3)}, {E.fmt_p(p_b)}", "p": p_b, "ok": not p_b < .05},
+        {"key": "a_homoscedasticity", "detail": f"LM = {bp[0]:.2f}, {E.fmt_p(bp[1])}", "p": bp[1], "ok": not bp[1] < .05},
+    ]
+    # results
+    res.rows.append(_row("Modelo/Model", "χ²", f"{df_f}", lr_f, p_f, "R²m", r2m, bounded=True))
+    fe, se = np.asarray(full.fe_params), np.asarray(full.bse_fe)
+    zc = stats.norm.ppf(.975)
+    coef = []
+    for i, name in enumerate(X.columns):
+        z = fe[i] / se[i]
+        pz = float(2 * stats.norm.sf(abs(z)))
+        lo, hi = fe[i] - zc * se[i], fe[i] + zc * se[i]
+        coef.append({"término/term": "intercepto/intercept" if name == "const" else name,
+                     "nivel/level": "" if name == "const" else str(level[name]), "B": fe[i], "EE/SE": se[i], "z": z, "p": pz,
+                     "IC95_inf/CI95_low": lo, "IC95_sup/CI95_high": hi})
+        if name != "const":
+            res.rows.append(_row(name, "z", None, z, pz, "B", fe[i], (lo, hi)))
+    res.extra_tables["ml_null"] = pd.DataFrame([{"J": J, "N": n, "τ₀₀": tau0, "σ²": sig0, "CCI/ICC": icc,
+                                                 "efecto de diseño/design effect": deff, "χ² LRT": lr0, "p": p0}])
+    res.extra_tables["fixed"] = pd.DataFrame(coef)
+    rand = [{"componente/component": f"intercepto/intercept ({cl})", "varianza/variance": S[0, 0], "DT/SD": np.sqrt(S[0, 0])}]
+    if d.random_slope:
+        rand.append({"componente/component": f"{d.random_slope} ({cl})", "varianza/variance": S[1, 1], "DT/SD": np.sqrt(S[1, 1])})
+        corr = S[0, 1] / np.sqrt(S[0, 0] * S[1, 1]) if S[0, 0] > 0 and S[1, 1] > 0 else np.nan
+        rand.append({"componente/component": "r intercepto–pendiente / intercept–slope", "varianza/variance": np.nan, "DT/SD": corr})
+    rand.append({"componente/component": "residual", "varianza/variance": float(full.scale), "DT/SD": np.sqrt(full.scale)})
+    res.extra_tables["random"] = pd.DataFrame(rand)
+    fit_row = {"R²m (marginal)": r2m, "R²c (condicional/conditional)": r2c, "−2LL (REML)": -2 * full.llf,
+               "AIC (ML)": full_ml.aic, "BIC (ML)": full_ml.bic, "χ² (efectos fijos/fixed effects)": lr_f, "gl/df": df_f, "p": p_f}
+    if slope_test:
+        fit_row.update({"χ² (pendiente aleatoria/random slope)": slope_test[0], "p (pendiente/slope)": slope_test[1]})
+    res.extra_tables["model"] = pd.DataFrame([fit_row])
+    # APA paragraph
+    fmt = lambda v: E.fmt_num(v, True)  # noqa: E731
+    num = lambda v: E.fmt_num(v)  # noqa: E731
+    res.notes.append((
+        f"Las {n} observaciones estaban agrupadas en {J} unidades de {cl} (entre {sizes.min()} y {sizes.max()} por grupo; M = {m_bar:.1f}). "
+        f"En el modelo nulo, el {icc:.0%} de la varianza de {y_name} se debió a diferencias entre grupos, CCI = {fmt(icc)} "
+        f"(τ₀₀ = {num(tau0)}, σ² = {num(sig0)}); la varianza del intercepto fue "
+        f"{'estadísticamente significativa' if p0 < d.alpha else 'no significativa'}, χ²(1) = {num(lr0)}, {E.fmt_p(p0)} "
+        f"(razón de verosimilitudes frente a la regresión ordinaria, mezcla de χ²; Self y Liang, 1987), con un efecto de diseño de {deff:.2f}.",
+        f"The {n} observations were nested in {J} {cl} units ({sizes.min()} to {sizes.max()} per cluster; M = {m_bar:.1f}). "
+        f"In the null model, {icc:.0%} of the variance in {y_name} was due to between-cluster differences, ICC = {fmt(icc)} "
+        f"(τ₀₀ = {num(tau0)}, σ² = {num(sig0)}); the intercept variance was "
+        f"{'statistically significant' if p0 < d.alpha else 'not significant'}, χ²(1) = {num(lr0)}, {E.fmt_p(p0)} "
+        f"(likelihood ratio against ordinary regression, χ² mixture; Self & Liang, 1987), with a design effect of {deff:.2f}."))
+    sl_es = sl_en = ""
+    if d.random_slope:
+        corr = rand[2]["DT/SD"]
+        sig_s = slope_test[1] < d.alpha
+        sl_es = (f" La pendiente de {d.random_slope} {'varió' if sig_s else 'no varió'} significativamente entre grupos, "
+                 f"τ₁₁ = {num(S[1, 1])} (DT = {num(np.sqrt(S[1, 1]))}; r con el intercepto = {fmt(corr)}), χ²(1, 2) = {num(slope_test[0])}, "
+                 f"{E.fmt_p(slope_test[1])} (mezcla de χ²).")
+        sl_en = (f" The slope of {d.random_slope} {'varied' if sig_s else 'did not vary'} significantly across clusters, "
+                 f"τ₁₁ = {num(S[1, 1])} (SD = {num(np.sqrt(S[1, 1]))}; r with the intercept = {fmt(corr)}), χ²(1, 2) = {num(slope_test[0])}, "
+                 f"{E.fmt_p(slope_test[1])} (χ² mixture).")
+    res.notes.append((
+        f"En el modelo completo (REML), la varianza del intercepto entre grupos fue τ₀₀ = {num(S[0, 0])} y la residual σ² = {num(full.scale)}; "
+        f"los predictores explicaron un R² marginal = {fmt(r2m)} y, junto con los efectos aleatorios, un R² condicional = {fmt(r2c)} "
+        f"(Nakagawa y Schielzeth, 2013).{sl_es} Los efectos fijos se informan como coeficientes no estandarizados (B) con pruebas z de Wald"
+        + ("; los predictores se centraron en la media general, de modo que el intercepto es el valor esperado en la media de todos ellos." if d.center else "."),
+        f"In the full model (REML), the between-cluster intercept variance was τ₀₀ = {num(S[0, 0])} and the residual variance σ² = {num(full.scale)}; "
+        f"the predictors explained a marginal R² = {fmt(r2m)} and, together with the random effects, a conditional R² = {fmt(r2c)} "
+        f"(Nakagawa & Schielzeth, 2013).{sl_en} Fixed effects are reported as unstandardized coefficients (B) with Wald z tests"
+        + ("; predictors were grand-mean centred, so the intercept is the expected value at the mean of all of them." if d.center else ".")))
+    if J < 30:
+        res.notes.append((f"Solo hay {J} grupos de nivel 2: las varianzas y los errores típicos de los predictores de nivel 2 pueden estar sesgados y las "
+                          "pruebas z ser algo liberales (Maas y Hox, 2005). Con pocos grupos, considera la corrección de Kenward-Roger (p. ej., lmerTest en R).",
+                          f"There are only {J} level-2 clusters: variances and the standard errors of level-2 predictors may be biased and z tests somewhat "
+                          "liberal (Maas & Hox, 2005). With few clusters, consider the Kenward-Roger correction (e.g., lmerTest in R)."))
+    mixed_l1 = [p for p in preds if level[p] == 1 and between[p] > .10]
+    if mixed_l1:
+        res.notes.append((f"Los predictores de nivel 1 {', '.join(mixed_l1)} tienen una parte importante de su varianza entre grupos "
+                          f"({', '.join(f'{between[p]:.0%}' for p in mixed_l1)}): su coeficiente mezcla el efecto intragrupo y el efecto entre grupos. "
+                          "Para separarlos, centra cada predictor en la media de su grupo y añade la media del grupo como predictor de nivel 2 (Enders y Tofighi, 2007).",
+                          f"The level-1 predictors {', '.join(mixed_l1)} have a sizeable share of their variance between clusters "
+                          f"({', '.join(f'{between[p]:.0%}' for p in mixed_l1)}): their coefficient mixes the within- and between-cluster effects. "
+                          "To separate them, centre each predictor at its cluster mean and add the cluster mean as a level-2 predictor (Enders & Tofighi, 2007)."))
+    if tau0 < 1e-6 * (tau0 + sig0) or S[0, 0] < 1e-6 * (S[0, 0] + full.scale):
+        res.notes.append(("La varianza entre grupos se estimó en ≈ 0 (ajuste singular): los datos apenas muestran dependencia y el modelo equivale "
+                          "prácticamente a una regresión ordinaria.",
+                          "The between-cluster variance was estimated at ≈ 0 (singular fit): the data show little dependence and the model is "
+                          "practically equivalent to ordinary regression."))
+    if not (full.converged and null_reml.converged) or any("converge" in m.lower() for m in warn):
+        res.notes.append(("El algoritmo de estimación mostró problemas de convergencia: interpreta los resultados con cautela "
+                          "(simplifica los efectos aleatorios o reescala los predictores).",
+                          "The estimation algorithm showed convergence problems: interpret the results with caution "
+                          "(simplify the random effects or rescale the predictors)."))
+    # figures
+    focal = d.random_slope or next((p for p in preds if level[p] == 1), preds[0])
+    res.figures.append(_plot_multilevel(df, d, full, focal, level[focal] == 1, preds, means, outdir))
+    res.figures.append(_plot_caterpillar(full, cl, outdir))

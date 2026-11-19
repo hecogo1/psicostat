@@ -202,6 +202,10 @@ def methods_text(design, lang="es"):
                     f"({', '.join(d.dv_levels)})" if d.dv_type != "continuous" else f"puntuaron {d.dv_name}")
             P.append(("Diseño", f"Se evaluó el acuerdo entre evaluadores (fiabilidad interjueces): {len(d.raters)} evaluadores "
                                 f"({', '.join(d.raters)}) {kind} de forma independiente para cada caso."))
+        elif d.analysis == "multilevel":
+            P.append(("Diseño", f"Se empleó un diseño multinivel (datos anidados) de dos niveles: las observaciones (nivel 1) estaban agrupadas en "
+                                f"unidades de {d.cluster} (nivel 2). La variable dependiente fue {d.dv_name} y los predictores, {', '.join(d.predictors)}"
+                                + (f"; se permitió que el efecto de {d.random_slope} variase entre grupos (pendiente aleatoria)" if d.random_slope else "") + "."))
         elif d.analysis == "moderation":
             P.append(("Diseño", f"Se examinó un modelo de moderación con {d.iv_name} como predictor (X), {d.moderator} como "
                                 f"moderador (W) y {d.dv_name} como variable dependiente (Y), evaluando la interacción X × W."))
@@ -214,6 +218,7 @@ def methods_text(design, lang="es"):
         ana += " ".join(rec.notes_text(lang)) + " "
         ana += ("Se informan los coeficientes de fiabilidad con intervalos de confianza al 95%. " if rec.test == "reliability" else
                 "Se informan los coeficientes de acuerdo con intervalos de confianza al 95%. " if rec.test in AGREEMENT_TESTS else
+                "Se informan los coeficientes no estandarizados con intervalos de confianza al 95% y los componentes de varianza. " if rec.test == "mixedlm" else
                 "Se informan tamaños del efecto con intervalos de confianza al 95%. ")
         ana += (f"El nivel de significación fue α = {fmt_num(d.alpha, True)} "
                 f"({_tails_es(d)}). Los análisis se realizaron con PsicoStat v{__version__} (Python; SciPy y statsmodels).")
@@ -254,6 +259,10 @@ def methods_text(design, lang="es"):
                     f"({', '.join(d.dv_levels)})" if d.dv_type != "continuous" else f"scored {d.dv_name}")
             P.append(("Design", f"Inter-rater agreement (inter-rater reliability) was assessed: {len(d.raters)} raters "
                                 f"({', '.join(d.raters)}) independently {kind} for each case."))
+        elif d.analysis == "multilevel":
+            P.append(("Design", f"A two-level multilevel (nested) design was used: observations (level 1) were nested in {d.cluster} units (level 2). "
+                                f"The dependent variable was {d.dv_name} and the predictors were {', '.join(d.predictors)}"
+                                + (f"; the effect of {d.random_slope} was allowed to vary across clusters (random slope)" if d.random_slope else "") + "."))
         elif d.analysis == "moderation":
             P.append(("Design", f"A moderation model was examined with {d.iv_name} as predictor (X), {d.moderator} as "
                                 f"moderator (W) and {d.dv_name} as dependent variable (Y), testing the X × W interaction."))
@@ -266,6 +275,7 @@ def methods_text(design, lang="es"):
         ana += " ".join(rec.notes_text(lang)) + " "
         ana += ("Reliability coefficients are reported with 95% confidence intervals. " if rec.test == "reliability" else
                 "Agreement coefficients are reported with 95% confidence intervals. " if rec.test in AGREEMENT_TESTS else
+                "Unstandardized coefficients are reported with 95% confidence intervals, together with the variance components. " if rec.test == "mixedlm" else
                 "Effect sizes are reported with 95% confidence intervals. ")
         ana += (f"The significance level was α = {fmt_num(d.alpha, True)} "
                 f"({_tails_en(d)}). Analyses were run with PsicoStat v{__version__} (Python; SciPy and statsmodels).")
@@ -370,7 +380,10 @@ def _tables(res, lang):
                 "agreement": ("Acuerdo entre evaluadores", "Inter-rater agreement"),
                 "crosstab": ("Tabla de contingencia entre evaluadores", "Rater contingency table"),
                 "categories": ("Frecuencia de cada categoría por evaluador", "Category frequencies by rater"),
-                "icc": ("Coeficientes de correlación intraclase (modelo de dos factores)", "Intraclass correlation coefficients (two-way model)")}.get(k, (k, k))[_L(lang)]
+                "icc": ("Coeficientes de correlación intraclase (modelo de dos factores)", "Intraclass correlation coefficients (two-way model)"),
+                "ml_null": ("Modelo nulo: varianza entre grupos y correlación intraclase", "Null model: between-cluster variance and intraclass correlation"),
+                "fixed": ("Efectos fijos", "Fixed effects"),
+                "random": ("Efectos aleatorios (componentes de varianza)", "Random effects (variance components)")}.get(k, (k, k))[_L(lang)]
         tabs.append((name, v))
     if res.posthoc is not None:
         tabs.append(((f"Post hoc: {res.posthoc_method}"), res.posthoc))

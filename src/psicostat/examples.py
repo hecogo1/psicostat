@@ -161,6 +161,22 @@ def example(name: str, seed: int = 42):
         bias = np.array([0.0, 0.3, -0.4])
         x = np.clip(true[:, None] + bias + rng.normal(0, .7, (n, 3)), 0, 10).round(1)
         df = pd.DataFrame({"id": _ids(n), **{r: x[:, j] for j, r in enumerate(raters)}})
+    elif name == "multilevel":
+        d = Design(title="Horas de estudio y rendimiento en matemáticas (alumnado anidado en clases)",
+                   question="¿Predicen las horas de estudio y el tamaño de la clase el rendimiento, teniendo en cuenta que el alumnado está agrupado en clases?",
+                   analysis="multilevel", dv_name="rendimiento", cluster="clase", predictors=["horas_estudio", "tamano_clase"],
+                   random_slope="horas_estudio", cluster_size=20, icc_plan=0.15)
+        J = 36
+        sizes = rng.integers(14, 27, J)
+        size_cl = rng.integers(18, 33, J)                  # level-2 predictor (class size)
+        u0, u1 = rng.normal(0, 4.0, J), rng.normal(0, 0.6, J)
+        rows = []
+        for j in range(J):
+            h = np.clip(rng.normal(5, 2, sizes[j]), 0, 12)
+            yv = 62 + (2.0 + u1[j]) * (h - 5) - 0.35 * (size_cl[j] - 25) + u0[j] + rng.normal(0, 6, sizes[j])
+            rows += [(f"C{j + 1:02d}", round(float(a), 1), int(size_cl[j]), round(float(b), 1)) for a, b in zip(h, yv)]
+        df = pd.DataFrame(rows, columns=["clase", "horas_estudio", "tamano_clase", "rendimiento"])
+        df.insert(0, "id", _ids(len(df)))
     elif name == "mcnemar":
         d = Design(title="Síntoma presente antes y después", analysis="compare", design="within", dv_type="nominal",
                    n_groups=2, levels=["antes", "despues"], dv_name="insomnio", iv_name="momento")
@@ -174,4 +190,4 @@ def example(name: str, seed: int = 42):
 
 
 EXAMPLES = ["ttest", "mannwhitney", "paired", "anova", "factorial", "ancova", "rm", "mixed", "chi2",
-            "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "reliability", "kappa", "icc", "mcnemar"]
+            "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "reliability", "kappa", "icc", "multilevel", "mcnemar"]

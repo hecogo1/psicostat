@@ -70,3 +70,22 @@ def test_cli_kappa_example(tmp_path, capsys):
     assert main(["analyze", str(ex / "diseno.json"), str(ex / "datos.csv"), "--out", str(tmp_path / "res")]) == 0
     out = capsys.readouterr().out
     assert "κ de Cohen" in out and "Landis y Koch" in out
+
+
+def test_wizard_multilevel(tmp_path, monkeypatch, capsys):
+    # analysis 9 = multilevel; DV, cluster, 2 predictors, random slope; 15 per cluster, ICC = .20, small f²
+    answers = iter(["T", "Q", "9", "bienestar", "centro", "edad,apoyo", "apoyo", "15", "0.2", "1", "", "", "", ""])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    assert main(["wizard", "--out", str(tmp_path / "w")]) == 0
+    out = capsys.readouterr().out
+    assert "modelo lineal mixto" in out and "N = 1515 (101 grupos de 15)" in out
+    assert open(tmp_path / "w" / "plantilla.csv").readline().strip() == "id,centro,edad,apoyo,bienestar"
+
+
+def test_cli_multilevel_example(tmp_path, capsys):
+    ex = tmp_path / "ex"
+    assert main(["example", "multilevel", "--out", str(ex)]) == 0
+    assert main(["analyze", str(ex / "diseno.json"), str(ex / "datos.csv"), "--out", str(tmp_path / "res")]) == 0
+    out = capsys.readouterr().out
+    assert "CCI = " in out and "R² marginal" in out
+    assert (tmp_path / "res" / "figuras" / "fig_interceptos.png").exists()

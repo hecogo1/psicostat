@@ -162,3 +162,37 @@ def test_agreement_kappa_from_scratch():
     assert not at.exception
     html = " ".join(m.value for m in at.markdown)
     assert "H₀: κ = .40" in html and "Cohen" in html
+
+
+def test_multilevel_example_in_ui():
+    at = _app()
+    at.selectbox(key="k_example").set_value("multilevel").run()
+    at.button(key="nav_1").click().run()
+    assert not at.exception
+    assert at.text_input(key="k_cluster").value == "clase"
+    assert at.text_input(key="k_random_slope").value == "horas_estudio"
+    at.button(key="nav_3").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "grupos × 20 observaciones" in html
+    at.button(key="nav_5").click().run()
+    at.button(key="run").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "CCI (modelo nulo)" in html and "Nakagawa y Schielzeth" in html
+
+
+def test_multilevel_from_scratch():
+    at = _app()
+    at.radio(key="k_analysis").set_value("multilevel").run()
+    at.button(key="nav_1").click().run()
+    assert not at.exception
+    at.text_input(key="k_predictors").set_value("x1, x2").run()
+    at.text_input(key="k_random_slope").set_value("x1").run()
+    at.button(key="nav_2").click().run()
+    assert not at.exception
+    at.number_input(key="k_icc_plan").set_value(0.2).run()
+    at.button(key="nav_3").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "Modelo lineal mixto" in html or "modelo lineal mixto" in html.lower()
