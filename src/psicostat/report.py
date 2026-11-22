@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from . import __version__
-from .design import DIRECTIONAL_TESTS, assumption_label, hypothesis_text, recommend
+from .design import DIRECTIONAL_TESTS, EQUIVALENCE_TESTS, assumption_label, hypothesis_text, recommend
 from .effects import fmt_num, fmt_p, magnitude
 from .i18n import t
 from .power import explain, sample_size
@@ -160,6 +160,71 @@ def _tails_en(d):
     return f"one-tailed test specified a priori; H₁: {hypothesis_text(d, 'en')}"
 
 
+def _bound_txt(d, lang, raw=None):
+    """'±0.50 (d de Cohen)' / '±2 puntos de <dv>' description of the equivalence bounds."""
+    es = lang == "es"
+    b = fmt_num(d.equivalence_bound)
+    if d.equivalence_units == "raw":
+        return f"±{b} {'en unidades de' if es else 'in units of'} {d.dv_name}"
+    sym = "d_z" if d.design == "within" else "d"
+    extra = f"; ±{fmt_num(raw)} {'en unidades de' if es else 'in units of'} {d.dv_name}" if raw is not None else ""
+    return f"±{b} ({sym} de Cohen{extra})" if es else f"±{b} (Cohen's {sym}{extra})"
+
+
+def _equivalence_methods(d, lang):
+    if not getattr(d, "equivalence", False) or recommend(d).test not in EQUIVALENCE_TESTS:
+        return ""
+    if lang == "es":
+        return (f"Para poder concluir la ausencia de un efecto relevante, se complementó la prueba con una prueba de equivalencia mediante "
+                f"dos contrastes unilaterales (TOST; Schuirmann, 1987; Lakens, 2017) con límites de equivalencia de {_bound_txt(d, lang)}, "
+                f"fijados como el menor tamaño del efecto de interés; se concluye equivalencia si ambos contrastes son significativos, "
+                f"es decir, si el IC {round((1 - 2 * d.alpha) * 100):d}% de la diferencia queda dentro de los límites. "
+                "El tamaño muestral se calculó para la prueba de diferencia, no para la de equivalencia. ")
+    return (f"To be able to conclude the absence of a meaningful effect, the test was complemented with an equivalence test using "
+            f"two one-sided tests (TOST; Schuirmann, 1987; Lakens, 2017) with equivalence bounds of {_bound_txt(d, lang)}, "
+            f"set as the smallest effect size of interest; equivalence is concluded if both tests are significant, "
+            f"that is, if the {round((1 - 2 * d.alpha) * 100):d}% CI of the difference lies within the bounds. "
+            "Sample size was planned for the difference test, not for the equivalence test. ")
+
+
+def equivalence_text(res, lang="es"):
+    """APA paragraph for the TOST result plus the combined conclusion with the NHST (Lakens et al., 2018)."""
+    eq, d = res.equivalence, res.design
+    if not eq:
+        return ""
+    es = lang == "es"
+    conf = f"{round(eq['conf'] * 100):d}%"
+    ci = f"{'IC ' + conf if es else conf + ' CI'} [{fmt_num(eq['ci'][0])}, {fmt_num(eq['ci'][1])}]"
+    t_max = eq["t_low"] if eq["p_low"] >= eq["p_upp"] else eq["t_upp"]
+    df = f"{eq['df']:.2f}" if d.design == "between" else f"{eq['df']:.0f}"
+    stat = f"t({df}) = {fmt_num(t_max)}, {fmt_p(eq['p'])}"
+    bounds = _bound_txt(d, lang, eq["upp"] if eq["units"] == "d" else None)
+    sig = res.rows[0]["p"] is not None and res.rows[0]["p"] < d.alpha
+    if es:
+        s = (f"Prueba de equivalencia (TOST): con límites de equivalencia de {bounds}, la diferencia observada ({eq['label']} = "
+             f"{fmt_num(eq['diff'])}, {ci}) {'fue' if eq['equivalent'] else 'no fue'} estadísticamente equivalente a cero, {stat} "
+             "(el mayor de los dos valores p unilaterales). ")
+        s += ("Conclusión (Lakens et al., 2018): la diferencia es estadísticamente significativa pero menor que el efecto mínimo de interés; es real, "
+              "aunque probablemente irrelevante en la práctica." if sig and eq["equivalent"] else
+              "Conclusión (Lakens et al., 2018): hay una diferencia y no puede descartarse que sea de una magnitud relevante." if sig else
+              "Conclusión (Lakens et al., 2018): no hubo una diferencia significativa y el efecto es menor que el mínimo de interés; los datos apoyan "
+              "la ausencia de un efecto relevante." if eq["equivalent"] else
+              "Conclusión (Lakens et al., 2018): resultado no concluyente; no hubo una diferencia significativa, pero tampoco puede afirmarse la equivalencia "
+              "(haría falta una muestra mayor o un efecto mínimo de interés más amplio, justificado de antemano).")
+        return s
+    s = (f"Equivalence test (TOST): with equivalence bounds of {bounds}, the observed difference ({eq['label']} = "
+         f"{fmt_num(eq['diff'])}, {ci}) was {'' if eq['equivalent'] else 'not '}statistically equivalent to zero, {stat} "
+         "(the larger of the two one-sided p values). ")
+    s += ("Conclusion (Lakens et al., 2018): the difference is statistically significant but smaller than the smallest effect of interest; it is real "
+          "but probably negligible in practice." if sig and eq["equivalent"] else
+          "Conclusion (Lakens et al., 2018): there is a difference and a meaningful effect size cannot be ruled out." if sig else
+          "Conclusion (Lakens et al., 2018): there was no significant difference and the effect is smaller than the smallest effect of interest; the data "
+          "support the absence of a meaningful effect." if eq["equivalent"] else
+          "Conclusion (Lakens et al., 2018): inconclusive result; there was no significant difference, but equivalence cannot be claimed either "
+          "(a larger sample or a wider, a priori justified, smallest effect of interest would be needed).")
+    return s
+
+
 def methods_text(design, lang="es"):
     d = design
     rec = recommend(d)
@@ -220,6 +285,7 @@ def methods_text(design, lang="es"):
                 "Se informan los coeficientes de acuerdo con intervalos de confianza al 95%. " if rec.test in AGREEMENT_TESTS else
                 "Se informan los coeficientes no estandarizados con intervalos de confianza al 95% y los componentes de varianza. " if rec.test == "mixedlm" else
                 "Se informan tamaños del efecto con intervalos de confianza al 95%. ")
+        ana += _equivalence_methods(d, "es")
         ana += (f"El nivel de significación fue α = {fmt_num(d.alpha, True)} "
                 f"({_tails_es(d)}). Los análisis se realizaron con PsicoStat v{__version__} (Python; SciPy y statsmodels).")
         P.append(("Análisis de datos", ana))
@@ -277,6 +343,7 @@ def methods_text(design, lang="es"):
                 "Agreement coefficients are reported with 95% confidence intervals. " if rec.test in AGREEMENT_TESTS else
                 "Unstandardized coefficients are reported with 95% confidence intervals, together with the variance components. " if rec.test == "mixedlm" else
                 "Effect sizes are reported with 95% confidence intervals. ")
+        ana += _equivalence_methods(d, "en")
         ana += (f"The significance level was α = {fmt_num(d.alpha, True)} "
                 f"({_tails_en(d)}). Analyses were run with PsicoStat v{__version__} (Python; SciPy and statsmodels).")
         P.append(("Data analysis", ana))
@@ -343,6 +410,8 @@ def results_text(res, lang="es"):
         sents.append(f"{subj} {sig}, {stat_str(r, lang)}{magtxt}.")
     head = (f"Resultados ({tl}): " if es else f"Results ({tl}): ")
     out.append(head + " ".join(sents))
+    if getattr(res, "equivalence", None):
+        out.append(equivalence_text(res, lang))
     if res.posthoc is not None and "p_ajust/p_adj" in res.posthoc.columns and "A" in res.posthoc.columns:
         sig = res.posthoc[res.posthoc["p_ajust/p_adj"] < d.alpha]
         if len(sig):
@@ -352,6 +421,8 @@ def results_text(res, lang="es"):
         else:
             out.append(f"Ninguna comparación post hoc ({res.posthoc_method}) fue significativa." if es else
                        f"No post hoc comparison ({res.posthoc_method}) was significant.")
+    if getattr(res, "equivalence", None):
+        return [p for p in out if p]
     out.append("Recuerda: un resultado no significativo no demuestra ausencia de efecto." if es and any(r["p"] is not None and r["p"] >= d.alpha for r in res.rows)
                else ("Remember: a non-significant result does not show the absence of an effect." if (not es and any(r["p"] is not None and r["p"] >= d.alpha for r in res.rows)) else ""))
     return [p for p in out if p]
@@ -383,7 +454,8 @@ def _tables(res, lang):
                 "icc": ("Coeficientes de correlación intraclase (modelo de dos factores)", "Intraclass correlation coefficients (two-way model)"),
                 "ml_null": ("Modelo nulo: varianza entre grupos y correlación intraclase", "Null model: between-cluster variance and intraclass correlation"),
                 "fixed": ("Efectos fijos", "Fixed effects"),
-                "random": ("Efectos aleatorios (componentes de varianza)", "Random effects (variance components)")}.get(k, (k, k))[_L(lang)]
+                "random": ("Efectos aleatorios (componentes de varianza)", "Random effects (variance components)"),
+                "equivalence": ("Prueba de equivalencia: dos contrastes unilaterales (TOST)", "Equivalence test: two one-sided tests (TOST)")}.get(k, (k, k))[_L(lang)]
         tabs.append((name, v))
     if res.posthoc is not None:
         tabs.append(((f"Post hoc: {res.posthoc_method}"), res.posthoc))

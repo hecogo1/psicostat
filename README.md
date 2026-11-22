@@ -13,7 +13,7 @@
 PsicoStat te guía paso a paso desde la pregunta de investigación hasta el texto de **Método** y **Resultados** en estilo **APA 7**, en español o inglés:
 
 1. **Asistente**: te pregunta el diseño (entre sujetos, intra sujetos, mixto, correlacional, regresión, asociación, mediación, moderación, fiabilidad de una escala, acuerdo entre evaluadores, datos anidados o multinivel), número de grupos o condiciones, nivel de medida de las variables, covariables, tamaño del efecto esperado (con la guía de Cohen), α y potencia.
-2. **Prueba recomendada**: t de Welch, t pareada, Mann-Whitney, Wilcoxon, ANOVA de un factor / Welch / factorial / medidas repetidas / mixto, ANCOVA, Kruskal-Wallis, Friedman, chi-cuadrado / Fisher, McNemar, Q de Cochran, Pearson / Spearman, regresión lineal, logística y logística ordinal (odds proporcionales), mediación simple (efecto indirecto con IC bootstrap), moderación (interacción X × W con ΔR², pendientes simples y gráfico), fiabilidad de escalas (α de Cronbach con IC de Feldt, ω de McDonald, correlación ítem-resto y α si se elimina el ítem, con recodificación de ítems inversos), acuerdo entre evaluadores (κ de Cohen, ponderada si las categorías son ordinales, κ de Fleiss con 3+ evaluadores y CCI de dos factores), modelo lineal mixto multinivel (intercepto y pendiente aleatorios, CCI del modelo nulo, efectos fijos con IC 95%, componentes de varianza y R² marginal y condicional); con supuestos a comprobar y alternativa no paramétrica.
+2. **Prueba recomendada**: t de Welch, t pareada, Mann-Whitney, Wilcoxon, ANOVA de un factor / Welch / factorial / medidas repetidas / mixto, ANCOVA, Kruskal-Wallis, Friedman, chi-cuadrado / Fisher, McNemar, Q de Cochran, Pearson / Spearman, regresión lineal, logística y logística ordinal (odds proporcionales), mediación simple (efecto indirecto con IC bootstrap), moderación (interacción X × W con ΔR², pendientes simples y gráfico), fiabilidad de escalas (α de Cronbach con IC de Feldt, ω de McDonald, correlación ítem-resto y α si se elimina el ítem, con recodificación de ítems inversos), acuerdo entre evaluadores (κ de Cohen, ponderada si las categorías son ordinales, κ de Fleiss con 3+ evaluadores y CCI de dos factores), modelo lineal mixto multinivel (intercepto y pendiente aleatorios, CCI del modelo nulo, efectos fijos con IC 95%, componentes de varianza y R² marginal y condicional); con supuestos a comprobar y alternativa no paramétrica. Las pruebas t pueden complementarse con una **prueba de equivalencia (TOST)** para poder concluir que no hay un efecto relevante.
 3. **Tamaño muestral a priori**, explicado y validado frente a G*Power.
 4. **Plantilla CSV** con las columnas exactas de tu diseño + **diccionario de datos**.
 5. **Análisis** del CSV relleno: descriptivos, supuestos (Shapiro-Wilk, Levene, Mauchly, Breusch-Pagan, VIF, Brant…), la prueba (con cambio automático a la alternativa si fallan los supuestos), **tamaños del efecto con IC 95%**, post hoc (Tukey, Games-Howell, Dunn, Holm) y gráficos.
@@ -71,7 +71,7 @@ psicostat template estudio/diseno.json --n 60 --out estudio/plantilla.csv
 psicostat analyze estudio/diseno.json estudio/plantilla.csv --out estudio/resultados
 
 # Ejemplos simulados: ttest, mannwhitney, paired, anova, factorial, ancova, rm, mixed,
-# chi2, correlation, regression, logistic, ordinal, mediation, moderation, reliability, kappa, icc, multilevel, mcnemar
+# chi2, correlation, regression, logistic, ordinal, mediation, moderation, reliability, kappa, icc, multilevel, mcnemar, equivalence
 psicostat example anova --out ejemplo
 psicostat analyze ejemplo/diseno.json ejemplo/datos.csv --out ejemplo/resultados
 ```
@@ -79,6 +79,8 @@ psicostat analyze ejemplo/diseno.json ejemplo/datos.csv --out ejemplo/resultados
 Usa `psicostat --lang en ...` para mensajes en inglés.
 
 **Contrastes unilaterales**: para pruebas t, Mann-Whitney, Wilcoxon y correlaciones puedes plantear una hipótesis direccional (`"alternative": "greater"` = nivel 1 > nivel 2 o relación positiva; `"less"` = lo contrario) en el asistente, en la web (paso 3) o con `--alternative greater|less` en `plan` y `analyze`. El tamaño muestral se calcula con α unilateral y el informe lo indica («p = ,012 (unilateral)», H₁ en el Método). Úsalos solo si la dirección se predijo antes de ver los datos.
+
+**Prueba de equivalencia (TOST)**: un resultado no significativo no demuestra que no haya efecto. Para la t de Welch y la t pareada puedes fijar el menor tamaño del efecto que te importaría, Δ (`"equivalence_bound": 0.4` en `diseno.json`, en d de Cohen o, con `"equivalence_units": "raw"`, en puntos de la VD), en el asistente, en la web (paso 3, «Prueba de equivalencia») o con `--equivalence 0.4 [--equivalence-units raw]` en `plan` y `analyze`. PsicoStat aplica dos contrastes unilaterales frente a −Δ y +Δ (Schuirmann, 1987; Lakens, 2017), informa el IC al 90% de la diferencia y redacta la conclusión combinada con la prueba de diferencia (Lakens et al., 2018): diferencia relevante, diferencia real pero irrelevante, equivalencia o resultado no concluyente. El plan indica también el N necesario para demostrar equivalencia. Justifica Δ antes de recoger los datos. Ejemplo: `psicostat example equivalence`.
 
 **Coma decimal**: añade `--decimal-comma` a `psicostat analyze` (o activa «Coma decimal en el informe» en la barra lateral de la web, o `"decimal_comma": true` en `diseno.json`) para que el informe en español use coma decimal (`M = 3,25; p = ,032; IC 95% [0,08; 1,36]`). El informe en inglés siempre usa punto.
 
@@ -124,6 +126,7 @@ Ver [`examples/`](examples/) para informes completos generados con los datos de 
 | Fiabilidad de una escala | α de Cronbach con IC exacto de Feldt et al. (1987) y prueba F frente al α mínimo (.70 por defecto) + ω total de McDonald (modelo de un factor por máxima verosimilitud, IC bootstrap), porque α supone tau-equivalencia (McNeish, 2018); los ítems inversos se recodifican (mín. + máx. − x); N a priori por Bonett (2002) |
 | Acuerdo entre evaluadores | Categorías y 2 evaluadores: κ de Cohen (ponderada cuadrática si son ordinales) con IC asintótico de Fleiss, Cohen y Everitt (1969); 3+ evaluadores: κ de Fleiss con IC bootstrap; puntuaciones cuantitativas: CCI(A,1) de dos factores y acuerdo absoluto (Koo y Li, 2016) con IC y pruebas F de McGraw y Wong (1996), más CCI(C,1), CCI(A,k) y CCI(C,k). Se contrasta frente a un acuerdo mínimo aceptable (.40 por defecto; 0 = frente al azar). N a priori: potencia exacta de la F para el CCI y fórmula de Cantor (1996) para κ |
 | Datos anidados (alumnado en clases, pacientes por terapeuta, medidas repetidas en formato largo) | Modelo lineal mixto por REML (statsmodels `MixedLM`) con intercepto aleatorio y, opcionalmente, pendiente aleatoria de un predictor de nivel 1; predictores centrados en la media general. CCI y efecto de diseño del modelo nulo con prueba de razón de verosimilitudes de la varianza (mezcla de χ²; Self y Liang, 1987); efectos fijos con pruebas z de Wald e IC 95%; R² marginal y condicional (Nakagawa y Schielzeth, 2013; Johnson, 2014); aviso si hay menos de 30 grupos (Maas y Hox, 2005) o si un predictor de nivel 1 mezcla efectos intra y entre grupos (Enders y Tofighi, 2007). N a priori: N efectivo de la prueba de un efecto fijo (f²) × efecto de diseño 1 + (m − 1)·CCI (Kish, 1965). Validado frente a lme4 |
+| Concluir ausencia de un efecto relevante (dos grupos o dos medidas) | Prueba de equivalencia TOST con los mismos EE y gl que la prueba t (Welch o pareada): equivalencia si ambos contrastes unilaterales son significativos, es decir, si el IC (1 − 2α) de la diferencia cae dentro de ±Δ (Schuirmann, 1987; Lakens, 2017). Δ en d se pasa a la escala de la VD con la DT media √((s₁² + s₂²)/2) o la DT de las diferencias. N a priori con la aproximación t de Chow et al. (2008), comprobada por simulación. Validado frente a statsmodels `ttost_ind` / `ttost_paired` |
 | Regresión con VD ordinal (p. ej., un ítem Likert) | Regresión logística ordinal de odds proporcionales + prueba de Brant (1990); N a priori por Whitehead (1993). La suma de varios ítems se trata como cuantitativa |
 
 Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.json`.
@@ -141,6 +144,7 @@ Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.
 - Bonett, D. G. (2002). Sample size requirements for testing and estimating coefficient alpha. *Journal of Educational and Behavioral Statistics, 27*(4), 335–340.
 - Brant, R. (1990). Assessing proportionality in the proportional odds model for ordinal logistic regression. *Biometrics, 46*(4), 1171–1178.
 - Cantor, A. B. (1996). Sample-size calculations for Cohen's kappa. *Psychological Methods, 1*(2), 150–153.
+- Chow, S.-C., Shao, J., & Wang, H. (2008). *Sample size calculations in clinical research* (2nd ed.). Chapman & Hall/CRC.
 - Clopper, C. J., & Pearson, E. S. (1934). The use of confidence or fiducial limits illustrated in the case of the binomial. *Biometrika, 26*(4), 404–413.
 - Cohen, J. (1960). A coefficient of agreement for nominal scales. *Educational and Psychological Measurement, 20*(1), 37–46.
 - Cohen, J. (1988). *Statistical power analysis for the behavioral sciences* (2nd ed.). Erlbaum.
@@ -163,7 +167,9 @@ Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.
 - Johnson, P. C. D. (2014). Extension of Nakagawa & Schielzeth's R²GLMM to random slopes models. *Methods in Ecology and Evolution, 5*(9), 944–946.
 - Kish, L. (1965). *Survey sampling*. Wiley.
 - Koo, T. K., & Li, M. Y. (2016). A guideline of selecting and reporting intraclass correlation coefficients for reliability research. *Journal of Chiropractic Medicine, 15*(2), 155–163.
+- Lakens, D. (2017). Equivalence tests: A practical primer for t tests, correlations, and meta-analyses. *Social Psychological and Personality Science, 8*(4), 355–362.
 - Lakens, D. (2022). Sample size justification. *Collabra: Psychology, 8*(1), 33267.
+- Lakens, D., Scheel, A. M., & Isager, P. M. (2018). Equivalence testing for psychological research: A tutorial. *Advances in Methods and Practices in Psychological Science, 1*(2), 259–269.
 - Landis, J. R., & Koch, G. G. (1977). The measurement of observer agreement for categorical data. *Biometrics, 33*(1), 159–174.
 - Maas, C. J. M., & Hox, J. J. (2005). Sufficient sample sizes for multilevel modeling. *Methodology, 1*(3), 86–92.
 - McCullagh, P. (1980). Regression models for ordinal data. *Journal of the Royal Statistical Society: Series B, 42*(2), 109–142.
@@ -172,6 +178,7 @@ Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.
 - McNeish, D. (2018). Thanks coefficient alpha, we'll take it from here. *Psychological Methods, 23*(3), 412–433.
 - Nakagawa, S., & Schielzeth, H. (2013). A general and simple method for obtaining R² from generalized linear mixed-effects models. *Methods in Ecology and Evolution, 4*(2), 133–142.
 - Peduzzi, P., et al. (1996). A simulation study of the number of events per variable in logistic regression analysis. *Journal of Clinical Epidemiology, 49*(12), 1373–1379.
+- Schuirmann, D. J. (1987). A comparison of the two one-sided tests procedure and the power approach for assessing the equivalence of average bioavailability. *Journal of Pharmacokinetics and Biopharmaceutics, 15*(6), 657–680.
 - Self, S. G., & Liang, K.-Y. (1987). Asymptotic properties of maximum likelihood estimators and likelihood ratio tests under nonstandard conditions. *Journal of the American Statistical Association, 82*(398), 605–610.
 - Serlin, R. C., Carr, J., & Marascuilo, L. A. (1982). A measure of association for selected nonparametric procedures. *Psychological Bulletin, 92*(3), 786–790.
 - Shrout, P. E., & Fleiss, J. L. (1979). Intraclass correlations: Uses in assessing rater reliability. *Psychological Bulletin, 86*(2), 420–428.
@@ -189,7 +196,7 @@ Puedes desactivar el cambio automático con `"auto_fallback": false` en `diseno.
 
 **PsicoStat** guides psychology students and researchers step by step from the research question to APA 7 **Method** and **Results** text, in Spanish or English.
 
-**Features**: guided wizard (design, groups/conditions, measurement levels, covariates, mediation, moderation, expected effect size with Cohen's benchmarks, α, power) → recommended test with assumptions and nonparametric fallback (including simple mediation with bootstrap CI for the indirect effect, moderation with the X × W interaction, ΔR², simple slopes and an interaction plot, scale reliability with Cronbach's α (Feldt CI), McDonald's ω and item statistics, inter-rater agreement with Cohen's κ (weighted for ordinal categories), Fleiss' κ and two-way ICCs, and multilevel linear mixed models for nested data with random intercepts/slopes, null-model ICC, fixed effects with 95% CIs, variance components and marginal/conditional R², validated against lme4) → a priori sample size (validated against G*Power; Fritz & MacKinnon for mediation; Bonett for reliability; exact ICC F-test power and Cantor's formula for κ; design effect for multilevel models) → CSV template + data dictionary → analysis (descriptives, assumption checks, test, effect sizes with 95% CIs, post hoc tests, plots) → APA 7 report in Markdown and DOCX.
+**Features**: guided wizard (design, groups/conditions, measurement levels, covariates, mediation, moderation, expected effect size with Cohen's benchmarks, α, power) → recommended test with assumptions and nonparametric fallback (including simple mediation with bootstrap CI for the indirect effect, moderation with the X × W interaction, ΔR², simple slopes and an interaction plot, scale reliability with Cronbach's α (Feldt CI), McDonald's ω and item statistics, inter-rater agreement with Cohen's κ (weighted for ordinal categories), Fleiss' κ and two-way ICCs, and multilevel linear mixed models for nested data with random intercepts/slopes, null-model ICC, fixed effects with 95% CIs, variance components and marginal/conditional R², validated against lme4; t tests can add a TOST equivalence test to conclude the absence of a meaningful effect) → a priori sample size (validated against G*Power; Fritz & MacKinnon for mediation; Bonett for reliability; exact ICC F-test power and Cantor's formula for κ; design effect for multilevel models) → CSV template + data dictionary → analysis (descriptives, assumption checks, test, effect sizes with 95% CIs, post hoc tests, plots) → APA 7 report in Markdown and DOCX.
 
 ### About
 
@@ -213,6 +220,7 @@ psicostat --lang en wizard --out study          # interactive CLI wizard
 psicostat --lang en plan study/diseno.json      # recommended test + sample size
 psicostat --lang en analyze study/diseno.json study/plantilla.csv --out study/results
 psicostat example mixed --out demo              # simulated example datasets
+psicostat --lang en analyze study/diseno.json study/plantilla.csv --equivalence 0.4   # add a TOST equivalence test (bounds ±0.4 d)
 ```
 
 Reports are always produced in both languages (`informe_es.*`, `informe_en.*`).

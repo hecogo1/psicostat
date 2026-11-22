@@ -47,6 +47,25 @@ def _chi2_power(lam, df, alpha):
     return float(stats.ncx2.sf(crit, df, lam))
 
 
+def tost_power(n, delta, alpha=0.05, paired=False):
+    """Approximate power of TOST with bounds ±delta (standardized) when the true difference is 0.
+
+    n = per-group size (independent) or number of pairs (paired). Uses the central t approximation
+    power ≈ 2·T_df(δ√(n/k) − t₁₋α,df) − 1, k = 2 (independent) or 1 (paired), the approach used by
+    TOSTER's power functions (Chow, Shao & Wang, 2008; Lakens, 2017).
+    """
+    df = n - 1 if paired else 2 * n - 2
+    if df < 1:
+        return 0.0
+    ncp = delta * math.sqrt(n if paired else n / 2)
+    return max(0.0, float(2 * stats.t.cdf(ncp - stats.t.ppf(1 - alpha, df), df) - 1))
+
+
+def tost_sample_size(delta, alpha=0.05, power=0.80, paired=False):
+    """Smallest n (per group, or pairs) for TOST power ≥ `power` with bounds ±delta and a true difference of 0."""
+    return _min_n(lambda n: tost_power(n, delta, alpha, paired), power, 2)
+
+
 def sample_size(d: Design, rec=None) -> dict:
     """Return dict with n_total, n_per_group, effect, family, method (es/en text) and details."""
     rec = rec or recommend(d)
@@ -272,6 +291,18 @@ def sample_size(d: Design, rec=None) -> dict:
                       "whose variance is mostly within clusters (Snijders & Bosker, 2012). "
                       "With few clusters, level-2 standard errors and variances are poorly estimated: aim for at least 30 clusters (Maas & Hox, 2005)"
                       + (f"; this computation gives only {groups}." if groups < 30 else ".")))
+    if getattr(d, "equivalence", False) and test in ("ttest_ind", "ttest_paired") and d.equivalence_units == "d":
+        paired = test == "ttest_paired"
+        ne = tost_sample_size(d.equivalence_bound, a, pw, paired)
+        if d.dropout and d.dropout > 0:
+            ne = math.ceil(ne / (1 - d.dropout))
+        sym = "d_z" if paired else "d"
+        tot_es = f"N = {ne}" if paired else f"N = {2 * ne} ({ne} por grupo)"
+        tot_en = f"N = {ne}" if paired else f"N = {2 * ne} ({ne} per group)"
+        notes.append((f"Si el objetivo principal es demostrar equivalencia (TOST con límites ±{d.equivalence_bound:.2f} en {sym}, suponiendo una diferencia "
+                      f"real nula), se necesitarían {tot_es} para la misma potencia (Chow et al., 2008).",
+                      f"If the main goal is to show equivalence (TOST with bounds ±{d.equivalence_bound:.2f} in {sym}, assuming a true difference of zero), "
+                      f"{tot_en} would be needed for the same power (Chow et al., 2008)."))
     n_before = n_total
     if d.dropout and d.dropout > 0:
         if npg:

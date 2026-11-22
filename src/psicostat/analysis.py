@@ -63,6 +63,7 @@ class Result:
     extra_tables: dict = field(default_factory=dict)
     figures: list = field(default_factory=list)
     notes: list = field(default_factory=list)          # (es, en)
+    equivalence: dict | None = None                    # TOST results (see effects.tost) when design.equivalence_bound > 0
 
 
 def _row(label, sym, df, stat, p, es_sym=None, es=None, ci=None, bounded=False, alternative="two-sided"):
@@ -400,12 +401,16 @@ def _two_groups(d, df, res, outdir):
         r = stats.ttest_ind(x, y, equal_var=False, alternative=d.alternative)
         gval, ci = E.hedges_g(x, y)
         res.rows.append(_row(f"{a} vs {b}", "t", f"{r.df:.2f}", r.statistic, r.pvalue, "g", gval, ci, alternative=d.alternative))
+        if d.equivalence:
+            _add_equivalence(res, E.tost_welch(x, y, d.equivalence_bound, d.equivalence_units, d.alpha), f"{a} − {b}")
     else:
         r = stats.mannwhitneyu(x, y, alternative=d.alternative)
         rb = E.rank_biserial_ind(x, y)
         ci = E.bootstrap_ci(E.rank_biserial_ind, [x, y])
         res.rows.append(_row(f"{a} vs {b}", "U", None, r.statistic, r.pvalue, "r_rb", rb, ci, bounded=True, alternative=d.alternative))
     res.figures.append(_plot_groups(g, d.dv_name, outdir))
+    if d.equivalence and res.test != "ttest_ind":
+        _equivalence_skipped(res)
 
 
 def _wide(df, d, levels):
@@ -430,12 +435,38 @@ def _paired(d, df, res, outdir):
         r = stats.ttest_rel(x, y, alternative=d.alternative)
         dz, ci = E.cohen_dz(diff)
         res.rows.append(_row(lab, "t", f"{len(diff) - 1}", r.statistic, r.pvalue, "d_z", dz, ci, alternative=d.alternative))
+        if d.equivalence:
+            _add_equivalence(res, E.tost_paired(diff, d.equivalence_bound, d.equivalence_units, d.alpha), f"{d.levels[0]} − {d.levels[1]}")
     else:
         r = stats.wilcoxon(x, y, alternative=d.alternative)
         rb = E.rank_biserial_paired(diff)
         ci = E.bootstrap_ci(lambda dd: E.rank_biserial_paired(dd), [diff])
         res.rows.append(_row(lab, "V", None, r.statistic, r.pvalue, "r_rb", rb, ci, bounded=True, alternative=d.alternative))
     res.figures.append(_plot_profiles(mat, d.levels, d.dv_name, outdir))
+    if d.equivalence and res.test != "ttest_paired":
+        _equivalence_skipped(res)
+
+
+def _equivalence_skipped(res):
+    res.notes.append(("No se realizó la prueba de equivalencia (TOST) porque se aplicó la alternativa no paramétrica; "
+                      "interpreta el resultado no significativo con cautela, sin concluir que no hay efecto.",
+                      "The equivalence test (TOST) was not run because the nonparametric alternative was used; "
+                      "interpret a non-significant result with caution, without concluding there is no effect."))
+
+
+def _add_equivalence(res, eq, label):
+    """Store TOST results (two one-sided tests against −Δ and +Δ) and their table."""
+    eq["label"] = label
+    res.equivalence = eq
+    conf = f"{round(eq['conf'] * 100):d}%"
+    res.extra_tables["equivalence"] = pd.DataFrame([
+        {"contraste/test": f"H₀: Δ ≤ {eq['low']:.2f}", "diferencia/difference": eq["diff"], "EE/SE": eq["se"],
+         "gl/df": eq["df"], "t": eq["t_low"], "p": eq["p_low"]},
+        {"contraste/test": f"H₀: Δ ≥ {eq['upp']:.2f}", "diferencia/difference": eq["diff"], "EE/SE": eq["se"],
+         "gl/df": eq["df"], "t": eq["t_upp"], "p": eq["p_upp"]},
+        {"contraste/test": f"TOST (IC/CI {conf} [{eq['ci'][0]:.2f}, {eq['ci'][1]:.2f}])", "diferencia/difference": eq["diff"],
+         "EE/SE": eq["se"], "gl/df": eq["df"], "t": eq["t_low"] if eq["p_low"] >= eq["p_upp"] else eq["t_upp"], "p": eq["p"]},
+    ])
 
 
 def _oneway(d, df, res, outdir):

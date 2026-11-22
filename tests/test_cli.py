@@ -18,12 +18,21 @@ def test_cli_example_plan_template_analyze(tmp_path, capsys):
 
 
 def test_wizard_with_defaults(tmp_path, monkeypatch, capsys):
-    answers = iter(["Mi estudio", "¿Funciona?", "1", "1", "1", "ansiedad", "grupo", "terapia,control", "1", "", "2", "", "", "", "", ""])
+    # last answer: no equivalence test (TOST bound 0)
+    answers = iter(["Mi estudio", "¿Funciona?", "1", "1", "1", "ansiedad", "grupo", "terapia,control", "1", "", "2", "", "", "", "", "", ""])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
     assert main(["wizard", "--out", str(tmp_path / "w")]) == 0
     out = capsys.readouterr().out
     assert "N = 128" in out
     assert os.path.exists(tmp_path / "w" / "plantilla.csv")
+
+
+def test_wizard_equivalence_bound(tmp_path, monkeypatch, capsys):
+    answers = iter(["T", "Q", "1", "1", "1", "nota", "modalidad", "online,presencial", "1", "", "2", "", "", "", "", "", "0.4"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    assert main(["wizard", "--out", str(tmp_path / "w")]) == 0
+    assert '"equivalence_bound": 0.4' in open(tmp_path / "w" / "diseno.json", encoding="utf-8").read()
+    assert "TOST" in capsys.readouterr().out
 
 
 def test_wizard_moderation_dichotomous_w(tmp_path, monkeypatch, capsys):

@@ -196,3 +196,28 @@ def test_multilevel_from_scratch():
     assert not at.exception
     html = " ".join(m.value for m in at.markdown)
     assert "Modelo lineal mixto" in html or "modelo lineal mixto" in html.lower()
+
+
+def test_equivalence_option_in_ui():
+    at = _app()
+    at.selectbox(key="k_example").set_value("ttest").run()
+    at.button(key="nav_2").click().run()
+    at.number_input(key="k_equivalence_bound").set_value(0.5).run()
+    at.button(key="next").click().run()
+    assert not at.exception
+    assert "TOST" in " ".join(m.value for m in at.markdown)
+    at.button(key="nav_5").click().run()
+    at.button(key="run").click().run()
+    assert not at.exception
+    assert "Prueba de equivalencia (TOST)" in " ".join(m.value for m in at.markdown)
+    assert any("Equivalencia" in x.value for x in list(at.info) + list(at.success))
+
+
+def test_equivalence_example_in_ui():
+    at = _app()
+    at.selectbox(key="k_example").set_value("equivalence").run()
+    assert at.session_state.k_equivalence_bound == pytest.approx(0.4)
+    at.button(key="nav_5").click().run()
+    at.button(key="run").click().run()
+    assert not at.exception
+    assert any("apoyan" in x.value for x in at.success)
