@@ -98,6 +98,52 @@ def cohen_dz(diff, conf=0.95):
     return dz, (dz - z * se, dz + z * se)
 
 
+def tost(diff, se, df, low, upp, alpha=0.05):
+    """Two one-sided t tests (TOST) of H₀: diff ≤ low or diff ≥ upp (Schuirmann, 1987; Lakens, 2017).
+
+    diff: observed mean difference; se: its standard error; df: degrees of freedom (Welch or n − 1).
+    Equivalence is declared when both one-sided tests reject at level α, i.e. when the
+    (1 − 2α) CI of the difference lies entirely inside [low, upp]. Returns a dict with both
+    t statistics and p values, the TOST p (the larger of the two) and the (1 − 2α) CI.
+    Same results as statsmodels ttost_ind(usevar="unequal") / ttost_paired.
+    """
+    t_low, t_upp = (diff - low) / se, (diff - upp) / se
+    p_low, p_upp = float(stats.t.sf(t_low, df)), float(stats.t.cdf(t_upp, df))
+    q = stats.t.ppf(1 - alpha, df)
+    return {"diff": float(diff), "se": float(se), "df": float(df), "low": float(low), "upp": float(upp),
+            "t_low": float(t_low), "p_low": p_low, "t_upp": float(t_upp), "p_upp": p_upp,
+            "p": max(p_low, p_upp), "ci": (float(diff - q * se), float(diff + q * se)),
+            "conf": 1 - 2 * alpha, "equivalent": bool(max(p_low, p_upp) < alpha)}
+
+
+def tost_welch(x, y, bound, units="d", alpha=0.05):
+    """TOST for two independent means with Welch's SE and df.
+
+    bound Δ in Cohen's d units is converted to raw units with the average SD
+    √((s₁² + s₂²)/2), the standardizer TOSTER uses for Welch's test (Lakens, 2017).
+    """
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    n1, n2 = len(x), len(y)
+    v1, v2 = np.var(x, ddof=1), np.var(y, ddof=1)
+    se = math.sqrt(v1 / n1 + v2 / n2)
+    df = (v1 / n1 + v2 / n2) ** 2 / ((v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1))
+    raw = bound * math.sqrt((v1 + v2) / 2) if units == "d" else bound
+    out = tost(np.mean(x) - np.mean(y), se, df, -raw, raw, alpha)
+    out.update(bound=float(bound), units=units, sd_std=math.sqrt((v1 + v2) / 2))
+    return out
+
+
+def tost_paired(diff, bound, units="d", alpha=0.05):
+    """TOST for paired means (difference scores); Δ in d_z units is converted with the SD of the differences."""
+    diff = np.asarray(diff, float)
+    n = len(diff)
+    sd = np.std(diff, ddof=1)
+    raw = bound * sd if units == "d" else bound
+    out = tost(np.mean(diff), sd / math.sqrt(n), n - 1, -raw, raw, alpha)
+    out.update(bound=float(bound), units=units, sd_std=float(sd))
+    return out
+
+
 def r_ci(r, n, conf=0.95, spearman=False):
     if n <= 3 or abs(r) >= 1:
         return (float("nan"), float("nan"))

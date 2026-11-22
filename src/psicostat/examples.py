@@ -184,10 +184,18 @@ def example(name: str, seed: int = 42):
         a = (rng.random(n) < .6).astype(int)
         b = np.where(a == 1, (rng.random(n) < .5).astype(int), (rng.random(n) < .1).astype(int))
         df = pd.DataFrame({"id": _ids(n), "insomnio_antes": a, "insomnio_despues": b})
+    elif name == "equivalence":
+        d = Design(title="Examen online frente a presencial",
+                   question="¿Es la nota del examen online equivalente a la del presencial (diferencia menor que d = 0.4)?",
+                   analysis="compare", design="between", n_groups=2, levels=["online", "presencial"],
+                   dv_name="nota", iv_name="modalidad", effect_size=0.4, equivalence_bound=0.4)
+        n = 150
+        df = pd.DataFrame({"id": _ids(2 * n), "modalidad": ["online"] * n + ["presencial"] * n,
+                           "nota": np.clip(np.r_[rng.normal(6.6, 1.5, n), rng.normal(6.7, 1.5, n)], 0, 10).round(1)})
     else:
         raise KeyError(f"Unknown example '{name}'. Available: {', '.join(EXAMPLES)}")
     return d, df
 
 
 EXAMPLES = ["ttest", "mannwhitney", "paired", "anova", "factorial", "ancova", "rm", "mixed", "chi2",
-            "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "reliability", "kappa", "icc", "multilevel", "mcnemar"]
+            "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "reliability", "kappa", "icc", "multilevel", "mcnemar", "equivalence"]

@@ -15,7 +15,7 @@ import streamlit as st
 
 from psicostat import __version__
 from psicostat.analysis import DataError, agreement_label, analyze, reliability_label
-from psicostat.design import BENCHMARKS, DIRECTIONAL_TESTS, Design, assumption_label, recommend
+from psicostat.design import BENCHMARKS, DIRECTIONAL_TESTS, EQUIVALENCE_TESTS, Design, assumption_label, recommend
 from psicostat.effects import fmt_num, fmt_p, magnitude
 from psicostat.examples import EXAMPLES, example
 from psicostat.i18n import t
@@ -125,7 +125,8 @@ st.markdown(CSS, unsafe_allow_html=True)
 FIELDS = ["title", "question", "analysis", "design", "dv_type", "iv_type", "dv_name", "iv_name", "levels", "n_factors",
           "factor_b_name", "levels_b", "dv_levels", "covariates", "predictors", "mediator", "moderator", "moderator_type", "moderator_levels", "center",
           "items", "reverse_items", "scale_min", "scale_max", "alpha_null", "raters", "agree_null", "cluster", "random_slope", "cluster_size", "icc_plan", "rho", "event_rate",
-          "effect_label", "effect_custom", "alpha", "power", "dropout", "decimal_comma", "alternative"]
+          "effect_label", "effect_custom", "alpha", "power", "dropout", "decimal_comma", "alternative",
+          "equivalence_bound", "equivalence_units"]
 LISTS = {"levels", "levels_b", "dv_levels", "covariates", "predictors", "moderator_levels", "items", "reverse_items", "raters"}
 
 
@@ -224,6 +225,9 @@ def current_design():
     base = Design(**kw)
     if g.get("alternative", "two-sided") != "two-sided" and recommend(base).test in DIRECTIONAL_TESTS:
         kw["alternative"] = g["alternative"]
+        return Design(**kw)
+    if float(g.get("equivalence_bound") or 0) > 0 and recommend(base).test in EQUIVALENCE_TESTS:
+        kw.update(equivalence_bound=float(g["equivalence_bound"]), equivalence_units=g.get("equivalence_units") or "d")
         return Design(**kw)
     return base
 
@@ -590,6 +594,27 @@ with main:
                                 "contraria no tendría interés. Necesita menos participantes, pero no puede detectar efectos en la otra dirección.",
                                 "Use a one-sided test only if you predicted the direction BEFORE seeing the data and an effect in the opposite "
                                 "direction would be of no interest. It needs fewer participants but cannot detect effects in the other direction."))
+            if (design is not None and design.alternative == "two-sided"
+                    and recommend(Design(**{**design.to_dict(), "equivalence_bound": 0.0})).test in EQUIVALENCE_TESTS):
+                with st.expander(L("⚖️ ¿Quieres poder concluir que NO hay un efecto relevante? Prueba de equivalencia (TOST)",
+                                   "⚖️ Want to be able to conclude there is NO meaningful effect? Equivalence test (TOST)"),
+                                 expanded=float(ss.get("k_equivalence_bound") or 0) > 0):
+                    st.caption(L("Un resultado no significativo no demuestra que no haya efecto. Con la prueba de equivalencia defines el menor "
+                                 "efecto que te importaría (Δ) y compruebas si la diferencia es claramente más pequeña que ±Δ (Lakens, 2017). "
+                                 "Déjalo en 0 para no usarla.",
+                                 "A non-significant result does not show there is no effect. With the equivalence test you set the smallest "
+                                 "effect you would care about (Δ) and check whether the difference is clearly smaller than ±Δ (Lakens, 2017). "
+                                 "Leave it at 0 to skip it."))
+                    e1, e2 = st.columns([1, 2])
+                    e1.number_input(L("Efecto mínimo de interés (Δ)", "Smallest effect of interest (Δ)"), 0.0, 1000.0, step=0.05,
+                                    key="k_equivalence_bound",
+                                    help=L("Justifícalo antes de recoger los datos (estudios previos, diferencia clínicamente relevante…). "
+                                           "En d de Cohen, .20–.50 son valores habituales; un Δ muy pequeño exige muestras muy grandes.",
+                                           "Justify it before collecting data (prior studies, clinically relevant difference…). "
+                                           "In Cohen's d, .20–.50 are common; a very small Δ requires very large samples."))
+                    e2.radio(L("Unidades de Δ", "Units of Δ"), ["d", "raw"], key="k_equivalence_units", horizontal=True,
+                             format_func=lambda x: (L("d de Cohen (estandarizado)", "Cohen's d (standardized)") if x == "d" else
+                                                    L(f"Puntos de {design.dv_name} (escala original)", f"Points of {design.dv_name} (raw scale)")))
         elif step == 3:
             head(3, L("Según tu diseño, esta es la prueba adecuada y la muestra que necesitas.", "Based on your design, this is the right test and the sample you need."))
             if design is None:
@@ -720,6 +745,19 @@ with main:
                                 (L("Tamaño del efecto", "Effect size"), es_txt, (ci_txt + (f" · {t(mag, lang)}" if mag else "")), "amber"),
                                 (r0["label"], dc(fmt_p(r0["p"])), chip, "rose"),
                             ])
+                        if res.equivalence:
+                            eqv, sig0 = res.equivalence, res.rows[0]["p"] is not None and res.rows[0]["p"] < design.alpha
+                            eq_msg = (L("⚖️ Equivalencia: la diferencia es significativa pero más pequeña que ±Δ (probablemente irrelevante).",
+                                        "⚖️ Equivalence: the difference is significant but smaller than ±Δ (probably negligible).") if sig0 and eqv["equivalent"] else
+                                      L("⚖️ Equivalencia: no se puede descartar un efecto de tamaño relevante.",
+                                        "⚖️ Equivalence: a meaningful effect cannot be ruled out.") if sig0 else
+                                      L("⚖️ Equivalencia: la diferencia es más pequeña que ±Δ; los datos apoyan que no hay un efecto relevante.",
+                                        "⚖️ Equivalence: the difference is smaller than ±Δ; the data support the absence of a meaningful effect.") if eqv["equivalent"] else
+                                      L("⚖️ Equivalencia: resultado no concluyente (ni diferencia significativa ni equivalencia).",
+                                        "⚖️ Equivalence: inconclusive result (neither a significant difference nor equivalence)."))
+                            (st.success if eqv["equivalent"] and not sig0 else st.info)(
+                                eq_msg + " " + dc(f"TOST {fmt_p(eqv['p'])} · {L('IC', 'CI')} {round(eqv['conf'] * 100):d}% "
+                                                  f"[{fmt_num(eqv['ci'][0])}, {fmt_num(eqv['ci'][1])}] · ±Δ = ±{fmt_num(eqv['upp'])}"))
                         tabs = st.tabs([L("📝 Resultados APA", "📝 APA results"), L("📈 Gráficos", "📈 Plots"), L("✅ Supuestos", "✅ Assumptions"),
                                         L("🔢 Tablas", "🔢 Tables"), L("📄 Método", "📄 Method")])
                         with tabs[0]:

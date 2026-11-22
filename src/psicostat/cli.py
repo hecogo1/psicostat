@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 from .analysis import analyze
-from .design import BENCHMARKS, DIRECTIONAL_TESTS, Design, assumption_label, recommend
+from .design import BENCHMARKS, DIRECTIONAL_TESTS, EQUIVALENCE_TESTS, Design, assumption_label, recommend
 from .examples import EXAMPLES, example
 from .i18n import t
 from .power import explain, sample_size
@@ -158,13 +158,24 @@ def wizard(lang="es"):
         if alt != "two-sided":
             kw["alternative"] = alt
             d = Design(**kw)
+    if recommend(d).test in EQUIVALENCE_TESTS and d.alternative == "two-sided":
+        eq = _ask("Prueba de equivalencia (TOST): efecto mínimo de interés Δ en d de Cohen (0 = no)" if lang == "es"
+                  else "Equivalence test (TOST): smallest effect of interest Δ in Cohen's d (0 = no)", 0.0, cast=float)
+        if eq > 0:
+            kw["equivalence_bound"] = eq
+            d = Design(**kw)
     return d
 
 
-def _with_alternative(d: Design, alternative):
-    if alternative is None:
-        return d
-    return Design.from_dict({**d.to_dict(), "alternative": alternative})
+def _with_alternative(d: Design, alternative, equivalence=None, equivalence_units=None):
+    upd = {}
+    if alternative is not None:
+        upd["alternative"] = alternative
+    if equivalence is not None:
+        upd["equivalence_bound"] = equivalence
+    if equivalence_units is not None:
+        upd["equivalence_units"] = equivalence_units
+    return Design.from_dict({**d.to_dict(), **upd}) if upd else d
 
 
 def print_plan(d: Design, lang="es"):
@@ -221,6 +232,10 @@ def main(argv=None):
     p.add_argument("design")
     p.add_argument("--alternative", choices=("two-sided", "greater", "less"), default=None,
                    help="hipótesis bilateral o unilateral (nivel 1 > nivel 2 = greater) / two- or one-sided hypothesis")
+    p.add_argument("--equivalence", type=float, default=None, metavar="DELTA",
+                   help="prueba de equivalencia TOST con límites ±DELTA (t de Welch o pareada) / TOST equivalence test with bounds ±DELTA")
+    p.add_argument("--equivalence-units", choices=("d", "raw"), default=None,
+                   help="unidades de DELTA: d de Cohen o escala de la VD / units of DELTA: Cohen's d or raw DV scale")
     tp = sub.add_parser("template", help="plantilla CSV / CSV template")
     tp.add_argument("design")
     tp.add_argument("--n", type=int, default=None)
@@ -230,6 +245,10 @@ def main(argv=None):
     a.add_argument("csv")
     a.add_argument("--alternative", choices=("two-sided", "greater", "less"), default=None,
                    help="hipótesis bilateral o unilateral / two- or one-sided hypothesis")
+    a.add_argument("--equivalence", type=float, default=None, metavar="DELTA",
+                   help="prueba de equivalencia TOST con límites ±DELTA (t de Welch o pareada) / TOST equivalence test with bounds ±DELTA")
+    a.add_argument("--equivalence-units", choices=("d", "raw"), default=None,
+                   help="unidades de DELTA: d de Cohen o escala de la VD / units of DELTA: Cohen's d or raw DV scale")
     a.add_argument("--out", default="resultados")
     a.add_argument("--formats", default="md,docx")
     a.add_argument("--decimal-comma", action="store_true", help="coma decimal en el informe en español / decimal comma in the Spanish report")
@@ -257,14 +276,14 @@ def main(argv=None):
         print(("\nRellena la plantilla y ejecuta:" if lang == "es" else "\nFill in the template and run:") +
               f"\n  psicostat analyze {os.path.join(args.out, 'diseno.json')} {tpl} --out {os.path.join(args.out, 'resultados')}")
     elif args.cmd == "plan":
-        print_plan(_with_alternative(Design.from_json(args.design), args.alternative), lang)
+        print_plan(_with_alternative(Design.from_json(args.design), args.alternative, args.equivalence, args.equivalence_units), lang)
     elif args.cmd == "template":
         d = Design.from_json(args.design)
         n = args.n or sample_size(d)["n_total"]
         for x in write_template(d, n, args.out):
             print(f"→ {x}")
     elif args.cmd == "analyze":
-        d = _with_alternative(Design.from_json(args.design), args.alternative)
+        d = _with_alternative(Design.from_json(args.design), args.alternative, args.equivalence, args.equivalence_units)
         if args.decimal_comma:
             d.decimal_comma = True
         res, paths = run_analysis(d, args.csv, args.out, formats=tuple(args.formats.split(",")))

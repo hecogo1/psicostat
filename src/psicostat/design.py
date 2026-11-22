@@ -10,6 +10,9 @@ from .i18n import t
 ALTERNATIVES = ("two-sided", "greater", "less")
 # tests for which a one-sided (directional) alternative is valid
 DIRECTIONAL_TESTS = {"ttest_ind", "mannwhitney", "ttest_paired", "wilcoxon", "pearson", "spearman"}
+# tests that can be complemented with an equivalence test (TOST; Schuirmann, 1987; Lakens, 2017)
+EQUIVALENCE_TESTS = {"ttest_ind", "ttest_paired"}
+EQUIVALENCE_UNITS = ("d", "raw")
 ANALYSES = ("compare", "correlation", "regression", "association", "mediation", "moderation", "reliability", "agreement", "multilevel")
 DESIGNS = ("between", "within", "mixed")
 LEVELS = ("continuous", "ordinal", "nominal")
@@ -75,6 +78,8 @@ class Design:
     auto_fallback: bool = True
     decimal_comma: bool = False        # Spanish output with decimal comma (APA in some countries)
     alternative: str = "two-sided"     # two-sided / greater / less (directional H1; see DIRECTIONAL_TESTS)
+    equivalence_bound: float = 0.0     # TOST: smallest effect size of interest Δ (bounds −Δ, +Δ); 0 = no equivalence test
+    equivalence_units: str = "d"       # units of Δ: "d" (Cohen's d / d_z) or "raw" (units of the DV)
 
     def __post_init__(self):
         if self.analysis not in ANALYSES:
@@ -165,10 +170,26 @@ class Design:
         if self.alternative != "two-sided" and recommend(self).test not in DIRECTIONAL_TESTS:
             raise ValueError("Los contrastes unilaterales solo están disponibles para pruebas t, Mann-Whitney, Wilcoxon y correlaciones / "
                              "one-sided tests are only available for t tests, Mann-Whitney, Wilcoxon and correlations")
+        self.equivalence_bound = float(self.equivalence_bound or 0.0)
+        if self.equivalence_units not in EQUIVALENCE_UNITS:
+            raise ValueError(f"equivalence_units must be one of {EQUIVALENCE_UNITS}")
+        if self.equivalence_bound < 0:
+            raise ValueError("El límite de equivalencia debe ser positivo (se usa ±Δ) / the equivalence bound must be positive (±Δ is used)")
+        if self.equivalence_bound > 0:
+            if recommend(self).test not in EQUIVALENCE_TESTS:
+                raise ValueError("La prueba de equivalencia (TOST) solo está disponible para la t de Welch y la t pareada / "
+                                 "the equivalence test (TOST) is only available for Welch's and the paired t test")
+            if self.alternative != "two-sided":
+                raise ValueError("La prueba de equivalencia (TOST) requiere la hipótesis bilateral / "
+                                 "the equivalence test (TOST) requires the two-sided hypothesis")
 
     @property
     def one_sided(self):
         return self.alternative != "two-sided"
+
+    @property
+    def equivalence(self):
+        return self.equivalence_bound > 0
 
     @property
     def within_levels(self):
