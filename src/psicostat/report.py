@@ -248,7 +248,8 @@ def methods_text(design, lang="es"):
                 ds += f", controlando las covariables {', '.join(d.covariates)}"
             P.append(("Diseño", ds + "."))
         elif d.analysis == "correlation":
-            P.append(("Diseño", f"Se empleó un diseño correlacional para examinar la relación entre {d.iv_name} y {d.dv_name}."))
+            P.append(("Diseño", f"Se empleó un diseño correlacional para examinar la relación entre {d.iv_name} y {d.dv_name}"
+                                + (f", controlando las covariables {', '.join(d.covariates)} (correlación parcial)" if d.covariates else "") + "."))
         elif d.analysis == "regression":
             P.append(("Diseño", f"Se empleó un diseño correlacional-predictivo con {d.dv_name} como variable criterio y "
                                 f"{', '.join(d.predictors)} como predictor(es)."))
@@ -306,7 +307,8 @@ def methods_text(design, lang="es"):
                 ds += f", controlling for {', '.join(d.covariates)}"
             P.append(("Design", ds + "."))
         elif d.analysis == "correlation":
-            P.append(("Design", f"A correlational design was used to examine the relationship between {d.iv_name} and {d.dv_name}."))
+            P.append(("Design", f"A correlational design was used to examine the relationship between {d.iv_name} and {d.dv_name}"
+                                + (f", controlling for {', '.join(d.covariates)} (partial correlation)" if d.covariates else "") + "."))
         elif d.analysis == "regression":
             P.append(("Design", f"A correlational-predictive design was used with {d.dv_name} as outcome and "
                                 f"{', '.join(d.predictors)} as predictor(s)."))
@@ -398,6 +400,9 @@ def results_text(res, lang="es"):
         return [p for p in out if p]
     # main results
     tl = t(res.test, lang)
+    partial = d.analysis == "correlation" and bool(d.covariates)
+    if partial:
+        tl = f"{tl} parcial" if es else f"partial {tl}"
     sents = []
     for r in res.rows:
         mag = magnitude(r["es_symbol"], r["es"]) if r["es_symbol"] else None
@@ -405,6 +410,10 @@ def results_text(res, lang="es"):
         if mag:
             magtxt = (f"; tamaño del efecto {t(mag, lang)}" if es else f"; {t(mag, lang)} effect size")
         subj, sig = _subject(r, lang), _sig(r, d.alpha, lang)
+        if partial and " – " in r["label"]:
+            a, b = r["label"].split(" – ", 1)
+            subj = (f"La correlación parcial entre {a} y {b} (controlando {', '.join(d.covariates)})" if es else
+                    f"The partial correlation between {a} and {b} (controlling for {', '.join(d.covariates)})")
         if es and subj.startswith("La "):
             sig = sig.replace("significativo", "significativa")
         sents.append(f"{subj} {sig}, {stat_str(r, lang)}{magtxt}.")

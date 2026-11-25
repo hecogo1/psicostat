@@ -211,6 +211,7 @@ def current_design():
         kw.update(dv_type=g["dv_type"], iv_type=g["iv_type"], dv_name=g["dv_name"])
         if a == "correlation":
             kw["iv_name"] = g["iv_name"]
+            kw["covariates"] = lst(g["covariates"])
         else:
             kw["predictors"] = lst(g["predictors"])
             if g["dv_type"] == "nominal":
@@ -523,6 +524,11 @@ with main:
                 c3.text_input(t("q_dv_name", lang), key="k_dv_name")
                 if a == "correlation":
                     c1.text_input(t("q_iv_name", lang), key="k_iv_name")
+                    c2.text_input(t("q_covariates_partial", lang), key="k_covariates",
+                                  help=L("Variables cuyo efecto quieres descontar (p. ej., edad o una medida previa). "
+                                         "Se calculará la correlación parcial; déjalo vacío para la correlación simple.",
+                                         "Variables whose effect you want to remove (e.g., age or a baseline measure). "
+                                         "A partial correlation is computed; leave empty for a simple correlation."))
                 else:
                     c1.text_input(t("q_predictors", lang), key="k_predictors")
                     if ss.k_dv_type == "nominal":

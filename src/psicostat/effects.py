@@ -144,10 +144,11 @@ def tost_paired(diff, bound, units="d", alpha=0.05):
     return out
 
 
-def r_ci(r, n, conf=0.95, spearman=False):
-    if n <= 3 or abs(r) >= 1:
+def r_ci(r, n, conf=0.95, spearman=False, k=0):
+    """Fisher-z CI for r (Bonett & Wright, 2000, SE for Spearman); k = number of covariates of a partial r."""
+    if n - k <= 3 or abs(r) >= 1:
         return (float("nan"), float("nan"))
-    se = math.sqrt((1 + r ** 2 / 2) / (n - 3)) if spearman else 1 / math.sqrt(n - 3)
+    se = math.sqrt((1 + r ** 2 / 2) / (n - 3 - k)) if spearman else 1 / math.sqrt(n - 3 - k)
     z = stats.norm.ppf(1 - (1 - conf) / 2)
     return math.tanh(math.atanh(r) - z * se), math.tanh(math.atanh(r) + z * se)
 
@@ -256,3 +257,28 @@ def fmt_num(x, bounded=False, dec=2):
     if bounded:
         s = s.replace("0.", ".", 1) if abs(x) < 1 else s
     return s
+
+
+def partial_corr(x, y, Z, alternative="two-sided"):
+    """Partial correlation of x and y controlling for the columns of Z (residual method).
+
+    Returns (r, t, df, p) with df = n − 2 − k. For a partial Spearman correlation pass the ranks
+    of x, y and Z. The t statistic equals the t of x in the OLS regression of y on x + Z.
+    """
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    Z = np.asarray(Z, float).reshape(len(x), -1)
+    A = np.column_stack([np.ones(len(x)), Z])
+    ex = x - A @ np.linalg.lstsq(A, x, rcond=None)[0]
+    ey = y - A @ np.linalg.lstsq(A, y, rcond=None)[0]
+    r = float(np.clip(np.sum(ex * ey) / math.sqrt(np.sum(ex ** 2) * np.sum(ey ** 2)), -1.0, 1.0))
+    df = len(x) - 2 - Z.shape[1]
+    if df < 1:
+        raise ValueError("Demasiadas covariables para el número de casos / too many covariates for the number of cases")
+    tval = r * math.sqrt(df / (1 - r ** 2)) if abs(r) < 1 else math.copysign(math.inf, r)
+    if alternative == "greater":
+        p = stats.t.sf(tval, df)
+    elif alternative == "less":
+        p = stats.t.cdf(tval, df)
+    else:
+        p = 2 * stats.t.sf(abs(tval), df)
+    return r, tval, df, float(p)

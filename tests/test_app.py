@@ -221,3 +221,16 @@ def test_equivalence_example_in_ui():
     at.button(key="run").click().run()
     assert not at.exception
     assert any("apoyan" in x.value for x in at.success)
+
+
+def test_partial_correlation_example_in_ui():
+    at = _app()
+    at.selectbox(key="k_example").set_value("partial").run()
+    assert at.session_state.k_analysis == "correlation"
+    at.button(key="nav_1").click().run()
+    assert not at.exception
+    assert at.text_input(key="k_covariates").value == "estres, edad"
+    at.button(key="nav_5").click().run()
+    at.button(key="run").click().run()
+    assert not at.exception
+    assert "correlación parcial" in " ".join(m.value for m in at.markdown)

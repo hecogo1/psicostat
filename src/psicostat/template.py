@@ -21,6 +21,8 @@ def columns(d: Design):
     if rec.test in ("pearson", "spearman"):
         cols += [(d.iv_name, "Variable X", "Variable X", d.iv_type, ""),
                  (d.dv_name, "Variable Y", "Variable Y", d.dv_type, "")]
+        cols += [(c, "Covariable que se controla (correlación parcial)", "Covariate to control for (partial correlation)", "continuous", "")
+                 for c in d.covariates]
     elif rec.test == "mediation":
         if d.iv_type == "nominal":
             cols.append((d.iv_name, "Predictor (X), dicotómico", "Predictor (X), dichotomous", "nominal", ", ".join(d.levels)))
