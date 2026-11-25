@@ -153,6 +153,11 @@ def sample_size(d: Design, rec=None) -> dict:
         if test == "spearman":
             n_total = math.ceil(n_total / 0.912)  # Bonett & Wright (2000) approximate efficiency
             method = (method[0] + "; ajuste por eficiencia de Spearman (÷ 0.912)", method[1] + "; Spearman efficiency adjustment (÷ 0.912)")
+        if d.covariates:
+            k = len(d.covariates)
+            n_total += k  # partial correlation: same power as a zero-order r with N − k cases (Cohen, 1988; G*Power)
+            method = (method[0] + f"; correlación parcial con {k} covariable(s): N + {k}",
+                      method[1] + f"; partial correlation with {k} covariate(s): N + {k}")
     elif test == "linreg":
         p = len(d.predictors)
         n_total = _min_n(lambda n: _f_power(es * n, p, n - p - 1, a), pw, p + 3)

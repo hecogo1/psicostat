@@ -127,6 +127,8 @@ T = {
     "q_cluster_size": ("Observaciones esperadas por grupo", "Expected observations per cluster"),
     "q_icc_plan": ("CCI esperado (proporción de varianza entre grupos)", "Expected ICC (share of variance between clusters)"),
     "q_covariates": ("Covariables (separadas por comas, opcional)", "Covariates (comma separated, optional)"),
+    "q_covariates_partial": ("Variables a controlar (correlación parcial; separadas por comas, opcional)",
+                             "Variables to control for (partial correlation; comma separated, optional)"),
     "q_effect_label": ("Tamaño del efecto esperado", "Expected effect size"),
     "q_effect_custom": ("Valor concreto (opcional; vacío = usar la etiqueta)", "Custom value (optional; empty = use label)"),
     "q_alpha": ("Nivel α", "α level"),

@@ -4,6 +4,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 
 ## [Sin publicar] / Unreleased
 
+### Añadido / Added
+- Correlación parcial: el análisis de correlación admite covariables opcionales (`"covariates"` en `diseno.json`, en el asistente web y en la CLI). Pearson parcial por el método de residuos con N − 2 − k gl e IC 95% por la z de Fisher (EE = 1/√(N − 3 − k)); Spearman parcial sobre rangos (con variables ordinales o al aplicar la alternativa no paramétrica) con el EE de Bonett y Wright (2000); contrastes unilaterales; N a priori = N de la correlación de orden cero + k; columnas de covariables en la plantilla y el diccionario; Método y Resultados APA en es/en; nuevo ejemplo `partial`. Validado frente a la t de X en la regresión MCO de Y sobre X + covariables y la fórmula recursiva de r_xy·z (#39) / Partial correlation: optional covariates for the correlation analysis (Pearson residual method, df = N − 2 − k, Fisher-z CI; rank-based partial Spearman), one-sided tests, sample size N + k, template columns, APA text, web/CLI options and a `partial` example; validated against OLS and the recursive formula.
+
 ## [0.7.0] - 2026-11-22
 
 ### Añadido / Added

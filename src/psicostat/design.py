@@ -165,6 +165,13 @@ class Design:
             self.icc_plan = float(self.icc_plan)
             if not 0 <= self.icc_plan < 1:
                 raise ValueError("El CCI esperado debe estar en [0, 1) / the expected ICC must be in [0, 1)")
+        self.covariates = [str(x).strip() for x in self.covariates if str(x).strip()]
+        if self.analysis == "correlation" and self.covariates:
+            if len(set(self.covariates)) != len(self.covariates):
+                raise ValueError("Hay covariables repetidas / duplicated covariates")
+            if {self.iv_name, self.dv_name} & set(self.covariates):
+                raise ValueError("Las covariables deben ser distintas de las dos variables correlacionadas / "
+                                 "covariates must differ from the two correlated variables")
         if self.alternative not in ALTERNATIVES:
             raise ValueError(f"alternative must be one of {ALTERNATIVES}")
         if self.alternative != "two-sided" and recommend(self).test not in DIRECTIONAL_TESTS:
@@ -343,11 +350,16 @@ def recommend(d: Design) -> Recommendation:
                           "The DV must be continuous for this linear mixed model; a dichotomous or ordinal DV needs a generalized linear mixed model (GLMM)."))
         return Recommendation("mixedlm", None, "f2", ["a_independent_clusters", "a_n_clusters", "a_linearity", "a_normality", "a_homoscedasticity"], notes)
     if d.analysis == "correlation":
+        partial = ([(f"Correlación parcial controlando {', '.join(d.covariates)}: se correlacionan los residuos de {d.iv_name} y "
+                     f"{d.dv_name} tras regresarlos sobre las covariables (gl = N − 2 − {len(d.covariates)}).",
+                     f"Partial correlation controlling for {', '.join(d.covariates)}: the residuals of {d.iv_name} and "
+                     f"{d.dv_name} after regressing them on the covariates are correlated (df = N − 2 − {len(d.covariates)}).")]
+                   if d.covariates else [])
         if "ordinal" in (d.dv_type, d.iv_type):
             return Recommendation("spearman", None, "r", [indep, "a_linearity"],
                                   [("Variables ordinales: se usa directamente Spearman (monotonía).",
-                                    "Ordinal variables: Spearman (monotonic relation) is used directly.")])
-        return Recommendation("pearson", "spearman", "r", [indep, N, "a_linearity", "a_outliers"])
+                                    "Ordinal variables: Spearman (monotonic relation) is used directly.")] + partial)
+        return Recommendation("pearson", "spearman", "r", [indep, N, "a_linearity", "a_outliers"], partial)
     if d.analysis == "regression":
         if d.dv_type == "nominal":
             return Recommendation("logreg", None, "or", [indep, "a_multicollinearity", "a_epv"],

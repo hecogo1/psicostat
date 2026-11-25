@@ -832,13 +832,33 @@ def _corr(d, df, res, outdir):
         res.assumptions += norm + [_outliers({"x": x, "y": y})]
         if not ok and n < SMALL_N and d.auto_fallback:
             res.test, res.fallback_reason = "spearman", "a_normality"
-    if res.test == "pearson":
+    if d.covariates:
+        _partial_corr(d, df, res, x, y)
+    elif res.test == "pearson":
         r, p = stats.pearsonr(x, y, alternative=d.alternative)
         res.rows.append(_row(f"{d.iv_name} – {d.dv_name}", "r", f"{n - 2}", r, p, "r", r, E.r_ci(r, n), bounded=True, alternative=d.alternative))
     else:
         r, p = stats.spearmanr(x, y, alternative=d.alternative)
         res.rows.append(_row(f"{d.iv_name} – {d.dv_name}", "r_s", f"{n - 2}", r, p, "r_s", r, E.r_ci(r, n, spearman=True), bounded=True, alternative=d.alternative))
     res.figures.append(_plot_scatter(x, y, d.iv_name, d.dv_name, outdir))
+
+
+def _partial_corr(d, df, res, x, y):
+    """Partial Pearson (or Spearman, on ranks) correlation controlling for d.covariates."""
+    Z = df[d.covariates].to_numpy(float)
+    k, n = Z.shape[1], len(x)
+    sp = res.test == "spearman"
+    if sp:
+        x, y = stats.rankdata(x), stats.rankdata(y)
+        Z = np.column_stack([stats.rankdata(z) for z in Z.T])
+    r, _, dfree, p = E.partial_corr(x, y, Z, alternative=d.alternative)
+    sym = "r_s" if sp else "r"
+    res.rows.append(_row(f"{d.iv_name} – {d.dv_name}", sym, f"{dfree}", r, p, sym, r, E.r_ci(r, n, spearman=sp, k=k),
+                         bounded=True, alternative=d.alternative))
+    res.notes.append((f"Correlación parcial{' de Spearman (sobre rangos)' if sp else ''} controlando {', '.join(d.covariates)} "
+                      f"(gl = N − 2 − {k}); el gráfico de dispersión muestra la relación de orden cero.",
+                      f"Partial{' Spearman (rank-based)' if sp else ''} correlation controlling for {', '.join(d.covariates)} "
+                      f"(df = N − 2 − {k}); the scatter plot shows the zero-order relationship."))
 
 
 def _design_matrix(d, df):

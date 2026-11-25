@@ -192,10 +192,23 @@ def example(name: str, seed: int = 42):
         n = 150
         df = pd.DataFrame({"id": _ids(2 * n), "modalidad": ["online"] * n + ["presencial"] * n,
                            "nota": np.clip(np.r_[rng.normal(6.6, 1.5, n), rng.normal(6.7, 1.5, n)], 0, 10).round(1)})
+    elif name == "partial":
+        d = Design(title="Uso del móvil y sueño controlando el estrés",
+                   question="¿Se relaciona el uso nocturno del móvil con la calidad del sueño al controlar el estrés y la edad?",
+                   analysis="correlation", iv_name="uso_movil", dv_name="calidad_sueno", iv_type="continuous",
+                   covariates=["estres", "edad"])
+        n = 120
+        edad = rng.uniform(18, 30, n)
+        estres = rng.normal(20, 5, n)
+        movil = 60 + 3 * (estres - 20) - 2 * (edad - 24) + rng.normal(0, 20, n)
+        sueno = 12 - 0.25 * (estres - 20) - 0.02 * (movil - 60) + rng.normal(0, 2, n)
+        df = pd.DataFrame({"id": _ids(n), "uso_movil": movil.round(0), "calidad_sueno": sueno.round(1),
+                           "estres": estres.round(1), "edad": edad.round(0)})
     else:
         raise KeyError(f"Unknown example '{name}'. Available: {', '.join(EXAMPLES)}")
     return d, df
 
 
 EXAMPLES = ["ttest", "mannwhitney", "paired", "anova", "factorial", "ancova", "rm", "mixed", "chi2",
-            "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "reliability", "kappa", "icc", "multilevel", "mcnemar", "equivalence"]
+            "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "reliability", "kappa", "icc", "multilevel", "mcnemar", "equivalence",
+            "partial"]

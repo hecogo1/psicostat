@@ -116,6 +116,7 @@ def wizard(lang="es"):
         kw["dv_name"] = _ask(t("q_dv_name", lang), "y")
         if analysis == "correlation":
             kw["iv_name"] = _ask(t("q_iv_name", lang), "x")
+            kw["covariates"] = _list(_ask(t("q_covariates_partial", lang), ""))
         else:
             kw["predictors"] = _list(_ask(t("q_predictors", lang), "x1,x2"))
             if kw["dv_type"] == "nominal":
