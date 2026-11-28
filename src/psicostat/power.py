@@ -10,7 +10,7 @@ from statsmodels.stats.power import TTestIndPower, TTestPower
 from .design import BENCHMARKS, DIRECTIONAL_TESTS, Design, recommend
 
 ARE_RANK = 0.864   # minimum asymptotic relative efficiency of rank tests (Hodges & Lehmann, 1956)
-NONPARAM = {"mannwhitney", "wilcoxon", "kruskal", "friedman"}
+NONPARAM = {"mannwhitney", "wilcoxon", "wilcoxon_one", "kruskal", "friedman"}
 
 
 def effect_value(d: Design, family: str) -> float:
@@ -87,6 +87,11 @@ def sample_size(d: Design, rec=None) -> dict:
         n_total = math.ceil(TTestPower().solve_power(effect_size=abs(es), alpha=a, power=pw, alternative=sm_alt))
         npg = n_total
         method = (f"prueba t para muestras relacionadas (d_z, {side_es})", f"paired t test (d_z, {side_en})")
+    elif test in ("ttest_one", "wilcoxon_one"):
+        n_total = math.ceil(TTestPower().solve_power(effect_size=abs(es), alpha=a, power=pw, alternative=sm_alt))
+        npg = n_total
+        method = (f"prueba t para una muestra, μ₀ = {d.test_value:g}; d, {side_es}",
+                  f"one-sample t test, μ₀ = {d.test_value:g}; d, {side_en}")
     elif test in ("anova_oneway", "kruskal"):
         k = d.n_groups
         n_total = _min_n(lambda n: _f_power(es ** 2 * n, k - 1, n - k, a), pw, k + 1)
@@ -296,12 +301,12 @@ def sample_size(d: Design, rec=None) -> dict:
                       "whose variance is mostly within clusters (Snijders & Bosker, 2012). "
                       "With few clusters, level-2 standard errors and variances are poorly estimated: aim for at least 30 clusters (Maas & Hox, 2005)"
                       + (f"; this computation gives only {groups}." if groups < 30 else ".")))
-    if getattr(d, "equivalence", False) and test in ("ttest_ind", "ttest_paired") and d.equivalence_units == "d":
-        paired = test == "ttest_paired"
+    if getattr(d, "equivalence", False) and test in ("ttest_ind", "ttest_paired", "ttest_one") and d.equivalence_units == "d":
+        paired = test in ("ttest_paired", "ttest_one")      # one sample: same TOST as on difference scores (n − 1 df)
         ne = tost_sample_size(d.equivalence_bound, a, pw, paired)
         if d.dropout and d.dropout > 0:
             ne = math.ceil(ne / (1 - d.dropout))
-        sym = "d_z" if paired else "d"
+        sym = "d_z" if test == "ttest_paired" else "d"
         tot_es = f"N = {ne}" if paired else f"N = {2 * ne} ({ne} por grupo)"
         tot_en = f"N = {ne}" if paired else f"N = {2 * ne} ({ne} per group)"
         notes.append((f"Si el objetivo principal es demostrar equivalencia (TOST con límites ±{d.equivalence_bound:.2f} en {sym}, suponiendo una diferencia "

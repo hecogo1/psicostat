@@ -204,6 +204,12 @@ def example(name: str, seed: int = 42):
         sueno = 12 - 0.25 * (estres - 20) - 0.02 * (movil - 60) + rng.normal(0, 2, n)
         df = pd.DataFrame({"id": _ids(n), "uso_movil": movil.round(0), "calidad_sueno": sueno.round(1),
                            "estres": estres.round(1), "edad": edad.round(0)})
+    elif name == "onesample":
+        d = Design(title="Ansiedad ante los exámenes frente a la norma",
+                   question="¿Es la ansiedad ante los exámenes del alumnado de primer curso distinta de la media normativa (T = 50)?",
+                   analysis="onesample", dv_name="ansiedad_T", test_value=50)
+        n = 45
+        df = pd.DataFrame({"id": _ids(n), "ansiedad_T": rng.normal(54, 10, n).round(0)})
     else:
         raise KeyError(f"Unknown example '{name}'. Available: {', '.join(EXAMPLES)}")
     return d, df
@@ -211,4 +217,4 @@ def example(name: str, seed: int = 42):
 
 EXAMPLES = ["ttest", "mannwhitney", "paired", "anova", "factorial", "ancova", "rm", "mixed", "chi2",
             "correlation", "regression", "logistic", "ordinal", "mediation", "moderation", "reliability", "kappa", "icc", "multilevel", "mcnemar", "equivalence",
-            "partial"]
+            "partial", "onesample"]

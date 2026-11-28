@@ -49,7 +49,8 @@ def wizard(lang="es"):
     title = _ask(t("q_title", lang), "")
     question = _ask(t("q_question", lang), "")
     analysis = _ask(t("q_analysis", lang), 1, [(a, t("an_" + a, lang)) for a in ("compare", "correlation", "regression", "association", "mediation",
-                                                                                "moderation", "reliability", "agreement", "multilevel")])
+                                                                                "moderation", "reliability", "agreement", "multilevel",
+                                                                                "onesample")])
     kw = dict(title=title, question=question, analysis=analysis)
     print("\n" + t("step2", lang))
     if analysis == "compare":
@@ -68,6 +69,10 @@ def wizard(lang="es"):
             kw["covariates"] = _list(_ask(t("q_covariates", lang), ""))
         if kw["design"] in ("within", "mixed"):
             kw["rho"] = _ask(t("q_rho", lang), 0.5, cast=float)
+    elif analysis == "onesample":
+        kw["dv_type"] = _ask(t("q_dv_type", lang), 1, [(x, t("t_" + x, lang)) for x in ("continuous", "ordinal")])
+        kw["dv_name"] = _ask(t("q_dv_name", lang), "puntuacion")
+        kw["test_value"] = _ask(t("q_test_value", lang), 0.0, cast=float)
     elif analysis == "association":
         kw.update(dv_type="nominal", iv_type="nominal")
         kw["iv_name"] = _ask(t("q_iv_name", lang), "var1")
@@ -148,7 +153,11 @@ def wizard(lang="es"):
     kw["dropout"] = _ask(t("q_dropout", lang), 0.0, cast=float)
     d = Design(**kw)
     if recommend(d).test in DIRECTIONAL_TESTS:
-        if d.analysis == "correlation":
+        if d.analysis == "onesample":
+            mu = f"{d.dv_name} {{}} μ₀ = {d.test_value:g}"
+            opts = [("two-sided", "bilateral / two-sided"), ("greater", "unilateral: " + mu.format(">")),
+                    ("less", "unilateral: " + mu.format("<"))]
+        elif d.analysis == "correlation":
             opts = [("two-sided", "bilateral / two-sided"), ("greater", f"relación positiva / positive ({d.iv_name}, {d.dv_name})"),
                     ("less", f"relación negativa / negative ({d.iv_name}, {d.dv_name})")]
         else:

@@ -15,6 +15,7 @@ import pandas as pd
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from cycler import cycler
+from matplotlib.ticker import MaxNLocator
 from scipy import stats
 from statsmodels.miscmodels.ordinal_model import OrderedModel
 from statsmodels.multivariate.factor import Factor
@@ -280,6 +281,24 @@ def _plot_profiles(mat, names, ylabel, outdir, name="fig_medidas.png"):
     return _save(fig, outdir, name)
 
 
+def _plot_one_sample(x, mu0, xlabel, outdir, name="fig_una_muestra.png"):
+    """Histogram of the sample with its mean ± 95% CI and the reference value μ₀."""
+    x = np.asarray(x, float)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.hist(x, bins="auto", color="#CCFBF1", edgecolor="#0F766E")
+    m, half = x.mean(), stats.t.ppf(.975, len(x) - 1) * stats.sem(x)
+    top = ax.get_ylim()[1]
+    ax.set_ylim(0, top * 1.22)
+    ax.axvline(mu0, color="#BE123C", ls="--", lw=2, label=f"μ₀ = {mu0:g}")
+    ax.errorbar(m, top * 1.1, xerr=half, fmt="D", color=ACCENT, capsize=5, lw=2, label=f"M = {m:.2f} (IC/CI 95%)")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Frecuencia / Frequency")
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.legend(frameon=False, loc="upper left", fontsize=8.5)
+    ax.spines[["top", "right"]].set_visible(False)
+    return _save(fig, outdir, name)
+
+
 def _plot_interaction(means: pd.DataFrame, ses: pd.DataFrame, xlabel, ylabel, outdir, name="fig_interaccion.png"):
     fig, ax = plt.subplots(figsize=(6, 4))
     x = np.arange(len(means.columns))
@@ -374,6 +393,7 @@ def analyze(d: Design, data, outdir=None) -> Result:
     fn = {
         "ttest_ind": _two_groups, "mannwhitney": _two_groups,
         "ttest_paired": _paired, "wilcoxon": _paired,
+        "ttest_one": _one_sample, "wilcoxon_one": _one_sample,
         "anova_oneway": _oneway, "kruskal": _oneway,
         "anova_factorial": _factorial, "ancova": _ancova,
         "anova_rm": _rm, "friedman": _rm, "anova_mixed": _mixed,
@@ -444,6 +464,46 @@ def _paired(d, df, res, outdir):
         res.rows.append(_row(lab, "V", None, r.statistic, r.pvalue, "r_rb", rb, ci, bounded=True, alternative=d.alternative))
     res.figures.append(_plot_profiles(mat, d.levels, d.dv_name, outdir))
     if d.equivalence and res.test != "ttest_paired":
+        _equivalence_skipped(res)
+
+
+def _one_sample(d, df, res, outdir):
+    x = df[d.dv_name].to_numpy(float)
+    mu0 = float(d.test_value)
+    diff = x - mu0
+    if np.ptp(x) == 0:
+        raise DataError("La VD no varía (todas las puntuaciones son iguales) / the DV has no variance")
+    res.descriptives = _desc({d.dv_name: x})
+    if res.test == "ttest_one":
+        w, p = _shapiro(x)
+        res.assumptions.append({"key": "a_normality", "detail": f"W = {E.fmt_num(w, True, 3)}, {E.fmt_p(p)}", "p": p, "ok": not p < .05})
+        res.assumptions.append(_outliers({d.dv_name: x}))
+        if p < .05 and len(x) < SMALL_N and d.auto_fallback:
+            res.test, res.fallback_reason = "wilcoxon_one", "a_normality"
+    lab = f"{d.dv_name} vs μ₀ = {mu0:g}"
+    if res.test == "ttest_one":
+        r = stats.ttest_1samp(x, mu0, alternative=d.alternative)
+        dval, ci = E.cohen_dz(diff)
+        res.rows.append(_row(lab, "t", f"{len(x) - 1}", r.statistic, r.pvalue, "d", dval, ci, alternative=d.alternative))
+        if d.equivalence:
+            _add_equivalence(res, E.tost_paired(diff, d.equivalence_bound, d.equivalence_units, d.alpha), "M − μ₀")
+    else:
+        if res.planned_test == "wilcoxon_one":
+            res.assumptions.append(_outliers({d.dv_name: x}))
+        if np.all(diff == 0):
+            raise DataError("Todas las puntuaciones son iguales a μ₀ / all scores equal μ₀")
+        r = stats.wilcoxon(diff, alternative=d.alternative)
+        rb = E.rank_biserial_paired(diff)
+        ci = E.bootstrap_ci(lambda dd: E.rank_biserial_paired(dd), [diff])
+        res.rows.append(_row(lab, "V", None, r.statistic, r.pvalue, "r_rb", rb, ci, bounded=True, alternative=d.alternative))
+    se = x.std(ddof=1) / np.sqrt(len(x))
+    q = stats.t.ppf(.975, len(x) - 1)
+    res.extra_tables["one_sample"] = pd.DataFrame([{
+        "μ₀": mu0, "M": x.mean(), "M − μ₀": x.mean() - mu0, "IC95_inf/CI95_low": x.mean() - mu0 - q * se,
+        "IC95_sup/CI95_high": x.mean() - mu0 + q * se, "Mdn": float(np.median(x)), "Mdn − μ₀": float(np.median(x)) - mu0,
+        "% > μ₀": 100 * float(np.mean(x > mu0)), "% < μ₀": 100 * float(np.mean(x < mu0))}])
+    res.figures.append(_plot_one_sample(x, mu0, d.dv_name, outdir))
+    if d.equivalence and res.test != "ttest_one":
         _equivalence_skipped(res)
 
 
