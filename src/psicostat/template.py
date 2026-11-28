@@ -79,6 +79,9 @@ def columns(d: Design):
     elif rec.test in ("mcnemar", "cochran"):
         for lv in d.levels:
             cols.append((f"{d.dv_name}_{lv}", f"VD en la condición '{lv}'", f"DV in condition '{lv}'", "nominal", "0, 1"))
+    elif rec.test in ("ttest_one", "wilcoxon_one"):
+        cols.append((d.dv_name, f"Variable dependiente (se compara con el valor de referencia μ₀ = {d.test_value:g})",
+                     f"Dependent variable (compared with the reference value μ₀ = {d.test_value:g})", dvt, ""))
     elif d.design == "within":
         if d.n_factors == 2:
             for a in d.levels:
@@ -111,7 +114,8 @@ def make_template(d: Design, n: int = 20):
     df["id"] = [f"P{i + 1:03d}" for i in range(n)]
     rec = recommend(d)
     if d.design in ("between", "mixed") and rec.test not in ("chi2", "fisher", "pearson", "spearman", "linreg", "logreg", "ordreg", "mediation", "moderation", "reliability",
-                                                            "kappa", "fleiss", "icc", "mixedlm"):
+                                                            "kappa", "fleiss", "icc", "mixedlm",
+                                                            "ttest_one", "wilcoxon_one"):
         if d.n_factors == 2 and d.design == "between":
             cells = [(a, b) for a in d.levels for b in d.levels_b]
             df[d.iv_name] = [cells[i % len(cells)][0] for i in range(n)]

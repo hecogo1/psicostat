@@ -9,11 +9,11 @@ from .i18n import t
 
 ALTERNATIVES = ("two-sided", "greater", "less")
 # tests for which a one-sided (directional) alternative is valid
-DIRECTIONAL_TESTS = {"ttest_ind", "mannwhitney", "ttest_paired", "wilcoxon", "pearson", "spearman"}
+DIRECTIONAL_TESTS = {"ttest_ind", "mannwhitney", "ttest_paired", "wilcoxon", "ttest_one", "wilcoxon_one", "pearson", "spearman"}
 # tests that can be complemented with an equivalence test (TOST; Schuirmann, 1987; Lakens, 2017)
-EQUIVALENCE_TESTS = {"ttest_ind", "ttest_paired"}
+EQUIVALENCE_TESTS = {"ttest_ind", "ttest_paired", "ttest_one"}
 EQUIVALENCE_UNITS = ("d", "raw")
-ANALYSES = ("compare", "correlation", "regression", "association", "mediation", "moderation", "reliability", "agreement", "multilevel")
+ANALYSES = ("compare", "onesample", "correlation", "regression", "association", "mediation", "moderation", "reliability", "agreement", "multilevel")
 DESIGNS = ("between", "within", "mixed")
 LEVELS = ("continuous", "ordinal", "nominal")
 
@@ -37,7 +37,7 @@ BENCHMARKS = {
 class Design:
     title: str = ""
     question: str = ""
-    analysis: str = "compare"          # compare / correlation / regression / association / mediation / moderation / reliability / agreement / multilevel
+    analysis: str = "compare"          # compare / onesample / correlation / regression / association / mediation / moderation / reliability / agreement / multilevel
     design: str = "between"            # between / within / mixed
     n_factors: int = 1                 # 1 or 2 (factorial)
     n_groups: int = 2                  # levels of factor A (groups or conditions)
@@ -67,6 +67,7 @@ class Design:
     random_slope: str = ""           # multilevel: optional predictor whose slope varies across clusters ("" = random intercept only)
     cluster_size: int = 20           # multilevel: expected mean number of observations per cluster (sample size planning)
     icc_plan: float = 0.10           # multilevel: expected intraclass correlation of the DV (design effect)
+    test_value: float = 0.0          # onesample: reference value μ₀ (test norm, scale midpoint, cut-off…)
     covariates: list = field(default_factory=list)
     effect_label: str = "medium"
     effect_size: Optional[float] = None
@@ -165,6 +166,14 @@ class Design:
             self.icc_plan = float(self.icc_plan)
             if not 0 <= self.icc_plan < 1:
                 raise ValueError("El CCI esperado debe estar en [0, 1) / the expected ICC must be in [0, 1)")
+        if self.analysis == "onesample":
+            try:
+                self.test_value = float(str(self.test_value).replace(",", "."))
+            except ValueError:
+                raise ValueError("El valor de referencia (μ₀) debe ser un número / the reference value (μ₀) must be a number") from None
+            if self.dv_type == "nominal":
+                raise ValueError("La comparación con un valor de referencia necesita una VD cuantitativa u ordinal / "
+                                 "comparing with a reference value needs a continuous or ordinal DV")
         self.covariates = [str(x).strip() for x in self.covariates if str(x).strip()]
         if self.analysis == "correlation" and self.covariates:
             if len(set(self.covariates)) != len(self.covariates):
@@ -184,8 +193,8 @@ class Design:
             raise ValueError("El límite de equivalencia debe ser positivo (se usa ±Δ) / the equivalence bound must be positive (±Δ is used)")
         if self.equivalence_bound > 0:
             if recommend(self).test not in EQUIVALENCE_TESTS:
-                raise ValueError("La prueba de equivalencia (TOST) solo está disponible para la t de Welch y la t pareada / "
-                                 "the equivalence test (TOST) is only available for Welch's and the paired t test")
+                raise ValueError("La prueba de equivalencia (TOST) solo está disponible para la t de Welch, la t pareada y la t para una muestra / "
+                                 "the equivalence test (TOST) is only available for Welch's, the paired and the one-sample t test")
             if self.alternative != "two-sided":
                 raise ValueError("La prueba de equivalencia (TOST) requiere la hipótesis bilateral / "
                                  "the equivalence test (TOST) requires the two-sided hypothesis")
@@ -260,6 +269,19 @@ def recommend(d: Design) -> Recommendation:
         return Recommendation("chi2", "fisher", "w", [indep, "a_expected"],
                               [("Si alguna frecuencia esperada es < 5 en una tabla 2×2 se usa la prueba exacta de Fisher.",
                                 "If any expected count is < 5 in a 2×2 table, Fisher's exact test is used.")])
+    if d.analysis == "onesample":
+        mu = _g(d.test_value)
+        notes = [(f"Se compara la media de {d.dv_name} con el valor de referencia μ₀ = {mu} (p. ej., la media normativa de un test, "
+                  "el punto medio de la escala o un punto de corte); el tamaño del efecto es la d de Cohen = (M − μ₀) / DT.",
+                  f"The mean of {d.dv_name} is compared with the reference value μ₀ = {mu} (e.g., a test norm, the scale midpoint "
+                  "or a cut-off); the effect size is Cohen's d = (M − μ₀) / SD.")]
+        if d.dv_type == "ordinal":
+            return Recommendation("wilcoxon_one", None, "d", [indep, "a_outliers"],
+                                  notes + [("VD ordinal: se usa directamente la prueba de Wilcoxon sobre las diferencias x − μ₀.",
+                                            "Ordinal DV: the Wilcoxon test on the differences x − μ₀ is used directly.")])
+        return Recommendation("ttest_one", "wilcoxon_one", "d", [indep, N, "a_outliers"],
+                              notes + [("Si la normalidad no se cumple con N < 30, se aplica la prueba de rangos con signo de Wilcoxon frente a μ₀.",
+                                        "If normality does not hold with N < 30, the Wilcoxon signed-rank test against μ₀ is used.")])
     if d.analysis == "mediation":
         notes = [("Mediación simple (X → M → Y): sendas a, b, c y c′ por MCO; efecto indirecto a×b con IC 95% bootstrap percentil "
                   "(5000 remuestreos). La VD y el mediador deben ser cuantitativos; la VI puede ser cuantitativa o dicotómica.",
@@ -442,6 +464,8 @@ def hypothesis_text(d: Design, lang="es") -> str:
     if not d.one_sided:
         return ""
     op = ">" if d.alternative == "greater" else "<"
+    if d.analysis == "onesample":
+        return f"{d.dv_name} {op} μ₀ = {_g(d.test_value)}"
     if d.analysis == "correlation":
         if lang == "es":
             return f"relación {'positiva' if d.alternative == 'greater' else 'negativa'} entre {d.iv_name} y {d.dv_name}"

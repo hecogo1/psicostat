@@ -111,6 +111,11 @@ def _subject(r, lang):
         return f"La pendiente simple de {x} cuando {cond}" if es else f"The simple slope of {x} when {cond}"
     if r["stat_symbol"] == "t" and " × " in lab:      # X × W interaction term (moderation)
         return f"La interacción {lab}" if es else f"The {lab} interaction"
+    if " vs μ₀ = " in lab:
+        a, b = lab.split(" vs μ₀ = ", 1)
+        mean_es, mean_en = ("la media de ", "the mean of ") if r["stat_symbol"] == "t" else ("", "")
+        return (f"La diferencia entre {mean_es}{a} y el valor de referencia μ₀ = {b}" if es else
+                f"The difference between {mean_en}{a} and the reference value μ₀ = {b}")
     if " vs " in lab:
         a, b = lab.split(" vs ", 1)
         return f"La diferencia entre {a} y {b}" if es else f"The difference between {a} and {b}"
@@ -132,7 +137,7 @@ def _desc_sentence(res, lang):
     if dsc is None or "M" not in dsc.columns:
         return ""
     parts = []
-    ordinal = res.test in ("mannwhitney", "wilcoxon", "kruskal", "friedman")
+    ordinal = res.test in ("mannwhitney", "wilcoxon", "wilcoxon_one", "kruskal", "friedman")
     sd = "DT" if lang == "es" else "SD"
     for _, r in dsc.iterrows():
         if ordinal:
@@ -166,7 +171,7 @@ def _bound_txt(d, lang, raw=None):
     b = fmt_num(d.equivalence_bound)
     if d.equivalence_units == "raw":
         return f"±{b} {'en unidades de' if es else 'in units of'} {d.dv_name}"
-    sym = "d_z" if d.design == "within" else "d"
+    sym = "d_z" if d.design == "within" and d.analysis == "compare" else "d"
     extra = f"; ±{fmt_num(raw)} {'en unidades de' if es else 'in units of'} {d.dv_name}" if raw is not None else ""
     return f"±{b} ({sym} de Cohen{extra})" if es else f"±{b} (Cohen's {sym}{extra})"
 
@@ -196,7 +201,7 @@ def equivalence_text(res, lang="es"):
     conf = f"{round(eq['conf'] * 100):d}%"
     ci = f"{'IC ' + conf if es else conf + ' CI'} [{fmt_num(eq['ci'][0])}, {fmt_num(eq['ci'][1])}]"
     t_max = eq["t_low"] if eq["p_low"] >= eq["p_upp"] else eq["t_upp"]
-    df = f"{eq['df']:.2f}" if d.design == "between" else f"{eq['df']:.0f}"
+    df = f"{eq['df']:.2f}" if d.design == "between" and d.analysis == "compare" else f"{eq['df']:.0f}"
     stat = f"t({df}) = {fmt_num(t_max)}, {fmt_p(eq['p'])}"
     bounds = _bound_txt(d, lang, eq["upp"] if eq["units"] == "d" else None)
     sig = res.rows[0]["p"] is not None and res.rows[0]["p"] < d.alpha
@@ -247,6 +252,9 @@ def methods_text(design, lang="es"):
             if d.covariates:
                 ds += f", controlando las covariables {', '.join(d.covariates)}"
             P.append(("Diseño", ds + "."))
+        elif d.analysis == "onesample":
+            P.append(("Diseño", f"Se empleó un diseño de una sola muestra: se comparó {d.dv_name} con un valor de referencia conocido "
+                                f"(μ₀ = {d.test_value:g})."))
         elif d.analysis == "correlation":
             P.append(("Diseño", f"Se empleó un diseño correlacional para examinar la relación entre {d.iv_name} y {d.dv_name}"
                                 + (f", controlando las covariables {', '.join(d.covariates)} (correlación parcial)" if d.covariates else "") + "."))
@@ -306,6 +314,9 @@ def methods_text(design, lang="es"):
             if d.covariates:
                 ds += f", controlling for {', '.join(d.covariates)}"
             P.append(("Design", ds + "."))
+        elif d.analysis == "onesample":
+            P.append(("Design", f"A single-sample design was used: {d.dv_name} was compared with a known reference value "
+                                f"(μ₀ = {d.test_value:g})."))
         elif d.analysis == "correlation":
             P.append(("Design", f"A correlational design was used to examine the relationship between {d.iv_name} and {d.dv_name}"
                                 + (f", controlling for {', '.join(d.covariates)} (partial correlation)" if d.covariates else "") + "."))
@@ -464,6 +475,7 @@ def _tables(res, lang):
                 "ml_null": ("Modelo nulo: varianza entre grupos y correlación intraclase", "Null model: between-cluster variance and intraclass correlation"),
                 "fixed": ("Efectos fijos", "Fixed effects"),
                 "random": ("Efectos aleatorios (componentes de varianza)", "Random effects (variance components)"),
+                "one_sample": ("Comparación con el valor de referencia μ₀", "Comparison with the reference value μ₀"),
                 "equivalence": ("Prueba de equivalencia: dos contrastes unilaterales (TOST)", "Equivalence test: two one-sided tests (TOST)")}.get(k, (k, k))[_L(lang)]
         tabs.append((name, v))
     if res.posthoc is not None:

@@ -234,3 +234,19 @@ def test_partial_correlation_example_in_ui():
     at.button(key="run").click().run()
     assert not at.exception
     assert "correlación parcial" in " ".join(m.value for m in at.markdown)
+
+
+def test_one_sample_example_in_ui():
+    at = _app()
+    at.selectbox(key="k_example").set_value("onesample").run()
+    assert at.session_state.k_analysis == "onesample"
+    at.button(key="nav_1").click().run()
+    assert not at.exception
+    assert at.number_input(key="k_test_value").value == 50
+    at.button(key="nav_2").click().run()
+    assert any("μ₀ = 50" in o for o in at.radio(key="k_alternative").options)
+    at.button(key="nav_5").click().run()
+    at.button(key="run").click().run()
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert "valor de referencia μ₀ = 50" in html and "d = 0.57" in html

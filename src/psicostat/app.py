@@ -124,7 +124,7 @@ st.markdown(CSS, unsafe_allow_html=True)
 # --------------------------------------------------------------------------- state
 FIELDS = ["title", "question", "analysis", "design", "dv_type", "iv_type", "dv_name", "iv_name", "levels", "n_factors",
           "factor_b_name", "levels_b", "dv_levels", "covariates", "predictors", "mediator", "moderator", "moderator_type", "moderator_levels", "center",
-          "items", "reverse_items", "scale_min", "scale_max", "alpha_null", "raters", "agree_null", "cluster", "random_slope", "cluster_size", "icc_plan", "rho", "event_rate",
+          "items", "reverse_items", "scale_min", "scale_max", "alpha_null", "raters", "agree_null", "cluster", "random_slope", "cluster_size", "icc_plan", "rho", "event_rate", "test_value",
           "effect_label", "effect_custom", "alpha", "power", "dropout", "decimal_comma", "alternative",
           "equivalence_bound", "equivalence_units"]
 LISTS = {"levels", "levels_b", "dv_levels", "covariates", "predictors", "moderator_levels", "items", "reverse_items", "raters"}
@@ -181,6 +181,9 @@ def current_design():
             kw["covariates"] = lst(g["covariates"])
         if g["design"] in ("within", "mixed"):
             kw["rho"] = float(g["rho"])
+    elif a == "onesample":
+        kw.update(dv_type=g["dv_type"] if g["dv_type"] in ("continuous", "ordinal") else "continuous", dv_name=g["dv_name"],
+                  test_value=float(str(g["test_value"] if g["test_value"] is not None else 0).replace(",", ".")))
     elif a == "association":
         kw.update(dv_type="nominal", iv_type="nominal", iv_name=g["iv_name"], levels=lst(g["levels"]),
                   dv_name=g["dv_name"], dv_levels=lst(g["dv_levels"]))
@@ -241,8 +244,10 @@ def alternative_label(x, d):
         pos = x == "greater"
         return L(f"Unilateral: relación {'positiva' if pos else 'negativa'} ({d.iv_name} ↑ → {d.dv_name} {'↑' if pos else '↓'})",
                  f"One-sided: {'positive' if pos else 'negative'} relationship ({d.iv_name} ↑ → {d.dv_name} {'↑' if pos else '↓'})")
-    a, b = d.levels[0], d.levels[1]
     op = ">" if x == "greater" else "<"
+    if d.analysis == "onesample":
+        return L(f"Unilateral: la media de {d.dv_name} {op} μ₀ = {d.test_value:g}", f"One-sided: mean of {d.dv_name} {op} μ₀ = {d.test_value:g}")
+    a, b = d.levels[0], d.levels[1]
     return L(f"Unilateral: {d.dv_name} en «{a}» {op} «{b}»", f"One-sided: {d.dv_name} in “{a}” {op} “{b}”")
 
 
@@ -354,9 +359,11 @@ with main:
             c1, c2 = st.columns(2)
             c1.text_input(t("q_title", lang), key="k_title", placeholder=L("p. ej., Mindfulness y estrés académico", "e.g., Mindfulness and academic stress"))
             c2.text_input(t("q_question", lang), key="k_question", placeholder=L("¿Reduce X la variable Y?", "Does X reduce Y?"))
-            st.radio(t("q_analysis", lang), ["compare", "correlation", "regression", "association", "mediation", "moderation", "reliability", "agreement", "multilevel"], key="k_analysis",
+            st.radio(t("q_analysis", lang), ["compare", "onesample", "correlation", "regression", "association", "mediation", "moderation", "reliability", "agreement", "multilevel"], key="k_analysis",
                      format_func=lambda a: t("an_" + a, lang),
-                     help=L("Comparar: diferencias entre grupos o momentos. Correlación: si dos variables varían juntas. "
+                     help=L("Comparar: diferencias entre grupos o momentos. "
+                            "Una muestra: si la media de tu muestra difiere de un valor conocido (media normativa de un test, punto medio de la escala). "
+                            "Correlación: si dos variables varían juntas. "
                             "Regresión: predecir una variable a partir de otras. Asociación: relación entre dos variables de categorías. "
                             "Mediación: si X influye en Y a través de un mediador M (efecto indirecto). "
                             "Moderación: si el efecto de X sobre Y cambia según una tercera variable W (interacción). "
@@ -364,7 +371,9 @@ with main:
                             "Acuerdo: si dos o más evaluadores o jueces puntúan o clasifican igual a los mismos casos (κ de Cohen o de Fleiss y CCI). "
                             "Multinivel: predecir una variable cuando las observaciones están agrupadas (alumnado en clases, pacientes por terapeuta, "
                             "medidas repetidas de una misma persona) y, por tanto, no son independientes.",
-                            "Compare: differences between groups or time points. Correlation: whether two variables vary together. "
+                            "Compare: differences between groups or time points. "
+                            "One sample: whether your sample mean differs from a known value (test norm, scale midpoint). "
+                            "Correlation: whether two variables vary together. "
                             "Regression: predict one variable from others. Association: relation between two categorical variables. "
                             "Mediation: whether X affects Y through a mediator M (indirect effect). "
                             "Moderation: whether the effect of X on Y changes with a third variable W (interaction). "
@@ -409,6 +418,17 @@ with main:
                     st.slider(t("q_rho", lang), 0.0, 0.9, step=0.05, key="k_rho",
                               help=L("Cuánto se parecen las puntuaciones de una misma persona entre medidas. 0.5 es un valor prudente si no lo sabes.",
                                      "How similar a person's scores are across measurements. 0.5 is a sensible default if unknown."))
+            elif a == "onesample":
+                if ss.get("k_dv_type") not in ("continuous", "ordinal"):
+                    ss.k_dv_type = "continuous"
+                c1.text_input(t("q_dv_name", lang), key="k_dv_name", help=L("Lo que mides en tu muestra (VD).", "What you measure in your sample (DV)."))
+                c2.number_input(t("q_test_value", lang), step=1.0, key="k_test_value",
+                                help=L("El valor conocido con el que comparas la media: la media normativa del test (p. ej., CI = 100, T = 50), "
+                                       "el punto medio de la escala (3 en un Likert 1–5), un punto de corte clínico o el valor de un estudio previo. "
+                                       "Fíjalo antes de ver los datos.",
+                                       "The known value you compare the mean with: the test norm (e.g., IQ = 100, T = 50), the scale midpoint "
+                                       "(3 on a 1–5 Likert), a clinical cut-off or a prior study's value. Set it before seeing the data."))
+                c3.selectbox(t("q_dv_type", lang), ["continuous", "ordinal"], key="k_dv_type", format_func=lambda x: t("t_" + x, lang), help=tip_type)
             elif a == "association":
                 c1.text_input(t("q_iv_name", lang), key="k_iv_name")
                 c1.text_input(t("q_levels", lang), key="k_levels")
